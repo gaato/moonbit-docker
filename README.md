@@ -4,8 +4,8 @@ Unofficial container images of the [MoonBit](https://www.moonbitlang.com/)
 toolchain, rebuilt automatically whenever upstream publishes a new release.
 
 This project is not affiliated with the MoonBit team. The images contain the
-upstream binaries as installed by the official install script; the license in
-this repository covers only the build scripts, not MoonBit itself.
+upstream binaries as installed by the official install script; see
+[License](#license).
 
 ```sh
 podman run --rm -it -v "$PWD:/work:Z" ghcr.io/gaato/moonbit moon test
@@ -57,3 +57,14 @@ runners, publishes the manifest list, and appends the version to
 To build a specific version by hand, run the workflow with the exact upstream
 version string (`0.10.14+7d59c7ec9`). Upstream only keeps recent releases;
 for older ones see [moonbit-binaries](https://github.com/chawyehsu/moonbit-binaries).
+
+## License
+
+The build scripts in this repository are under the
+[Blue Oak Model License 1.0.0](LICENSE.md). That license does not cover
+MoonBit itself. Upstream publishes the sources of
+[moon](https://github.com/moonbitlang/moon/blob/main/LICENSE) and
+[core](https://github.com/moonbitlang/core/blob/main/LICENSE) under
+Apache-2.0, and of the
+[compiler](https://github.com/moonbitlang/moonbit-compiler/blob/main/LICENSE.TXT)
+under the MoonBit Public Source License.
