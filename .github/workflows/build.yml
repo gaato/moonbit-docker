@@ -1,0 +1,175 @@
+name: Build
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Exact upstream version to (re)build, e.g. "0.10.14+7d59c7ec9". Empty: build the current upstream release if it is new.'
+        required: false
+        default: ""
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/moonbit
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      build: ${{ steps.resolve.outputs.build }}
+      version: ${{ steps.resolve.outputs.version }}
+      latest: ${{ steps.resolve.outputs.latest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve version
+        id: resolve
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # moonc reports e.g. "v0.10.14+7d59c7ec9 (2026-09-18)"
+          upstream=$(curl -fsSL https://cli.moonbitlang.com/version.json \
+            | jq -r '.items[] | select(.name == "moonc") | .version' \
+            | sed -E 's/^v//; s/ .*$//')
+          version=${INPUT_VERSION:-$upstream}
+          if ! [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9a-f]+$ ]]; then
+            echo "::error::unexpected version string: '$version' (upstream: '$upstream')"
+            exit 1
+          fi
+
+          if [[ -z $INPUT_VERSION ]] && grep -qxF "$version" versions.txt; then
+            echo "$version is already built"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "build=true"
+            echo "version=$version"
+            if [[ $version == "$upstream" ]]; then echo "latest=true"; else echo "latest=false"; fi
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            MOONBIT_VERSION=${{ needs.check.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=Unofficial MoonBit toolchain image
+            org.opencontainers.image.version=${{ needs.check.outputs.version }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      # The digest is already pushed but untagged; failing here stops publish
+      # from tagging it.
+      - name: Smoke test
+        env:
+          ENGINE: docker
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: ./test.sh "$IMAGE@$DIGEST"
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [check, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create manifest list
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+          LATEST: ${{ needs.check.outputs.latest }}
+        run: |
+          set -euo pipefail
+          # "+" is not allowed in image tags: 0.10.14+7d59c7ec9 -> 0.10.14, 0.10.14-7d59c7ec9
+          tags=(-t "$IMAGE:${VERSION%%+*}" -t "$IMAGE:${VERSION/+/-}")
+          if [[ $LATEST == true ]]; then tags+=(-t "$IMAGE:latest"); fi
+          sources=()
+          for digest in *; do sources+=("$IMAGE@sha256:$digest"); done
+          docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+          docker buildx imagetools inspect "$IMAGE:${VERSION/+/-}"
+
+      # Doubles as the "already built" state and as repository activity, which
+      # keeps GitHub from disabling the schedule after 60 idle days.
+      - name: Record version
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          if grep -qxF "$VERSION" versions.txt; then exit 0; fi
+          echo "$VERSION" >> versions.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add versions.txt
+          git commit -m "Record $VERSION"
+          git push
