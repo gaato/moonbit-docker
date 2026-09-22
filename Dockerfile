@@ -1,6 +1,6 @@
 FROM debian:trixie-slim
 
-# Exact upstream version such as "0.10.14+7d59c7ec9", or "latest".
+# Exact upstream version such as "0.10.14+7d59c7ec9", "latest", or "nightly".
 ARG MOONBIT_VERSION=latest
 
 # World-writable so the image works under arbitrary UIDs
