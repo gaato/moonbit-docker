@@ -6,16 +6,17 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Exact upstream version to (re)build, e.g. "0.10.14+7d59c7ec9". Empty: build the current upstream release if it is new.'
+        description: 'Exact upstream version to rebuild. Empty: build unpublished bases of the current release.'
         required: false
         default: ""
+      base:
+        description: 'Base name from bases.json, or all'
+        required: false
+        default: all
 
 concurrency:
   group: build
   cancel-in-progress: false
-
-env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/moonbit
 
 permissions: {}
 
@@ -25,140 +26,55 @@ jobs:
     permissions:
       contents: read
     outputs:
-      build: ${{ steps.resolve.outputs.build }}
-      version: ${{ steps.resolve.outputs.version }}
-      latest: ${{ steps.resolve.outputs.latest }}
+      build: ${{ steps.prepare.outputs.build }}
+      version: ${{ steps.prepare.outputs.version }}
+      latest: ${{ steps.prepare.outputs.latest }}
+      matrix: ${{ steps.prepare.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Resolve version
-        id: resolve
+      - name: Test publication logic
+        run: prove scripts/*.t
+      - name: Select bases
+        id: prepare
         env:
+          CHANNEL: release
+          INPUT_BASE: ${{ inputs.base }}
           INPUT_VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          # moonc reports e.g. "v0.10.14+7d59c7ec9 (2026-09-18)"
-          upstream=$(curl -fsSL https://cli.moonbitlang.com/version.json \
-            | jq -r '.items[] | select(.name == "moonc") | .version' \
-            | sed -E 's/^v//; s/ .*$//')
-          version=${INPUT_VERSION:-$upstream}
-          if ! [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9a-f]+$ ]]; then
-            echo "::error::unexpected version string: '$version' (upstream: '$upstream')"
-            exit 1
-          fi
-
-          if [[ -z $INPUT_VERSION ]] && grep -qxF "$version" versions.txt; then
-            echo "$version is already built"
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          {
-            echo "build=true"
-            echo "version=$version"
-            if [[ $version == "$upstream" ]]; then echo "latest=true"; else echo "latest=false"; fi
-          } >> "$GITHUB_OUTPUT"
+        run: perl scripts/release.pl prepare
 
   build:
     needs: check
     if: needs.check.outputs.build == 'true'
     strategy:
-      fail-fast: true
-      matrix:
-        base:
-          - name: trixie
-            image: debian:trixie-slim
-          - name: bookworm
-            image: debian:bookworm-slim
-          - name: bci16.0
-            image: registry.suse.com/bci/bci-base:16.0
-        arch: [amd64, arm64]
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.check.outputs.matrix) }}
+    uses: ./.github/workflows/base.yml
     permissions:
       contents: read
       packages: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    with:
+      base: ${{ matrix.name }}
+      image: ${{ matrix.image }}
+      version: ${{ needs.check.outputs.version }}
+      latest: ${{ needs.check.outputs.latest == 'true' }}
 
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push by digest
-        id: build
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          platforms: linux/${{ matrix.arch }}
-          build-args: |
-            BASE_IMAGE=${{ matrix.base.image }}
-            MOONBIT_VERSION=${{ needs.check.outputs.version }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.description=Unofficial MoonBit toolchain image
-            org.opencontainers.image.version=${{ needs.check.outputs.version }}
-          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
-
-      # The digest is already pushed but untagged; failing here stops publish
-      # from tagging it.
-      - name: Smoke test
-        env:
-          ENGINE: docker
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: ./test.sh "$IMAGE@$DIGEST"
-
-      - name: Export digest
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/digests/${{ matrix.base.name }}"
-          touch "$RUNNER_TEMP/digests/${{ matrix.base.name }}/${DIGEST#sha256:}"
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: digest-${{ matrix.base.name }}-${{ matrix.arch }}
-          path: ${{ runner.temp }}/digests/
-          if-no-files-found: error
-          retention-days: 1
-
-  publish:
+  record:
     needs: [check, build]
+    # Preserve successful publications even when another base fails.
+    if: ${{ !cancelled() && needs.check.result == 'success' && needs.check.outputs.build == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-      packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Test publication logic
-        run: prove scripts/publish.t
-
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: ${{ runner.temp }}/digests
-          pattern: digest-*
+          path: ${{ runner.temp }}/receipts
+          pattern: published-*
           merge-multiple: true
-
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish images
+      - name: Record successful bases
         env:
-          DIGEST_DIR: ${{ runner.temp }}/digests
           VERSION: ${{ needs.check.outputs.version }}
-          LATEST: ${{ needs.check.outputs.latest }}
-        run: perl scripts/publish.pl
+          TARGETS: ${{ needs.check.outputs.matrix }}
+          RECEIPT_DIR: ${{ runner.temp }}/receipts
+        run: perl scripts/release.pl record

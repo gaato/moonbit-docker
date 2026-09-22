@@ -21,13 +21,10 @@ Run tests in the current directory:
 podman run --rm -it -v "$PWD:/work:Z" ghcr.io/gaato/moonbit:latest moon test
 ```
 
-Use `:nightly` instead of `:latest` to try the nightly toolchain.
-Tags without a distribution suffix use Debian trixie. Append `-bookworm`
-to any tag (for example, `latest-bookworm` or `nightly-bookworm`) to use
-Debian bookworm instead, or `-bci16.0` for SUSE BCI 16.0. The Debian variants
-use slim base images; the SUSE variant uses BCI Base.
+Use `:nightly` to try the nightly toolchain, or a version tag such as `:0.10`
+to stay on a release series.
 
-## As a build stage
+### Multi-stage builds
 
 ```dockerfile
 FROM ghcr.io/gaato/moonbit:0.10.14 AS build
@@ -39,61 +36,81 @@ COPY --from=build /work/_build/native/release/build/cmd/main/main.exe /app
 ENTRYPOINT ["/app"]
 ```
 
-Native binaries link dynamically against the builder's glibc (Debian 13,
-glibc 2.41 by default), so the runtime image needs the same glibc or newer,
-along with any other required shared libraries. Use a `-bookworm` builder
-for Debian 12 runtimes (glibc 2.36).
-Use a `-bci16.0` builder for SUSE BCI 16.0 runtimes (glibc 2.40).
+Adjust the executable path to match your project. Choose a builder base
+compatible with your runtime: native binaries need a compatible glibc and
+any other shared libraries they link against. For example, use a
+`-bookworm` builder for a Debian 12 runtime.
+
+### GitHub Actions
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/gaato/moonbit:0.10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: moon test
+```
+
+## Bases
+
+Tags without a suffix use Debian trixie. Append a suffix to any tag to
+choose another base, for example `0.10-bookworm` or `nightly-tumbleweed`.
+
+| Tag suffix | Base image |
+|---|---|
+| none | `debian:trixie-slim` |
+| `-bookworm` | `debian:bookworm-slim` |
+| `-bci16.0` | `registry.suse.com/bci/bci-base:16.0` |
+| `-tumbleweed` | `registry.opensuse.org/opensuse/tumbleweed:latest` |
+| `-ubuntu24.04` | `ubuntu:24.04` |
+| `-ubuntu26.04` | `ubuntu:26.04` |
+
+All variants contain the upstream MoonBit toolchain in `/opt/moon`, plus
+`git`, `curl`, `gcc`, and libc development headers. The toolchain directory
+is writable by any UID, allowing use with `--user` or `--userns=keep-id`.
 
 ## Tags
 
 | Tag | Meaning |
 |---|---|
-| `latest` | Current upstream release |
+| `latest` | Latest published upstream release for the base |
 | `nightly` | Upstream nightly, rebuilt daily |
-| `nightly-YYYYMMDD` | First successful nightly image published on that UTC date |
+| `nightly-YYYYMMDD` | First successful nightly publication on that UTC date |
 | `0.10` | Latest published patch release in the `0.10.x` series |
 | `0.10.14` | Release version without the build hash |
 | `0.10.14-7d59c7ec9` | Exact upstream version `0.10.14+7d59c7ec9` |
 
-New builds also provide `-bookworm` and `-bci16.0` variants of each tag,
-such as `0.10-bookworm`, `0.10-bci16.0`, `0.10.14-7d59c7ec9-bci16.0`,
-or `nightly-YYYYMMDD-bci16.0`. Minor tags stay within their series: `0.10`
-does not move to `0.11`, and rebuilding an older patch does not move it
-backward. Rebuilding the newest patch can update its minor tag.
-
-Dated nightly tags are preserved on subsequent runs that day. Use a dated
-tag or an image digest to pin a nightly build. Preservation is checked
-separately for each distribution.
-
-Release images are built when a new upstream version is detected; they do
-not receive automatic base image updates. [`versions.txt`](versions.txt)
-lists published releases. Older releases are not backfilled.
-Existing dated nightlies are not backfilled with new distribution variants either.
-
-## What is inside
-
-- `debian:trixie-slim` (glibc 2.41) by default, `debian:bookworm-slim`
-  (glibc 2.36) for `-bookworm` tags, or `registry.suse.com/bci/bci-base:16.0`
-  (glibc 2.40) for `-bci16.0` tags
-- `git`, `curl`, `gcc`, and libc development headers for the native backend
-- MoonBit in `/opt/moon` (`MOON_HOME`), checked against upstream's SHA-256 list
-  at build time and writable by any UID, so `--user` and
-  `--userns=keep-id` work
+Minor tags stay within their series: `0.10` does not move to `0.11`.
+Dated nightly tags are preserved after publication. Use an image digest to
+pin an exact image.
 
 ## Updates
 
-Daily workflows check for new releases and rebuild nightly images. All three
-base images on both architectures must pass smoke tests before tags are
-published.
+Each base is published once both `linux/amd64` and `linux/arm64` pass smoke
+tests. Bases publish independently, so a failed build can leave one base
+on an older version. See [`versions.json`](versions.json) for published
+releases by base.
 
-To publish a specific release manually, run the Build workflow with its upstream
-version string (`0.10.14+7d59c7ec9`). Upstream only keeps recent releases;
-for older ones see [moonbit-binaries](https://github.com/chawyehsu/moonbit-binaries).
+Daily workflows check for new releases and rebuild nightly images. Release
+images do not receive automatic base image updates, including the
+Tumbleweed variant. Older releases and dated nightlies are not backfilled
+when a base is added.
 
-Publication logic lives in `scripts/publish.pl` and uses only standard Perl
-modules plus the existing `curl`, `docker`, and `git` tools. Run its tests with
-`prove scripts/publish.t`; the tests do not contact the registry or publish images.
+## Maintenance
+
+The Build workflow accepts an upstream `version` such as
+`0.10.14+7d59c7ec9` and a `base` from [`bases.json`](bases.json), or `all`
+(the default). Specifying a version forces a rebuild; leaving it empty
+builds the current release for bases that have not published it yet.
+The nightly workflow also accepts `base`.
+
+Run the publication tests locally:
+
+```fish
+prove scripts/*.t
+```
 
 ## License
 

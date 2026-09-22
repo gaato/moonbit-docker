@@ -24,19 +24,53 @@ sub parse_version {
     die "Invalid release version: $version\n";
 }
 
-sub read_versions {
+sub read_json {
     my ($path) = @_;
     open my $file, '<', $path or die "Cannot read $path: $!\n";
-    my @versions = <$file>;
+    local $/;
+    my $value = decode_json(<$file>);
     close $file or die "Cannot close $path: $!\n";
-    chomp @versions;
-    parse_version($_) for @versions;
-    return @versions;
+    return $value;
+}
+
+sub write_json {
+    my ($path, $value) = @_;
+    open my $file, '>', "$path.tmp" or die "Cannot write $path.tmp: $!\n";
+    print {$file} JSON::PP->new->canonical->pretty->encode($value) or die "Cannot write $path: $!\n";
+    close $file or die "Cannot close $path: $!\n";
+    rename "$path.tmp", $path or die "Cannot replace $path: $!\n";
+}
+
+sub read_bases {
+    my $bases = read_json('bases.json');
+    die "Expected a nonempty base list\n" unless ref $bases eq 'ARRAY' && @$bases;
+    my (%names, %suffixes);
+    for my $base (@$bases) {
+        die "Invalid base definition\n" unless ref $base eq 'HASH'
+            && ($base->{name} // '') =~ /\A[a-z0-9][a-z0-9.-]*\z/
+            && ($base->{image} // '') =~ /\A[a-z0-9][a-z0-9.:\/-]*\z/
+            && defined $base->{suffix} && $base->{suffix} =~ /\A(?:-[a-z0-9][a-z0-9.-]*)?\z/;
+        die "Duplicate base name or suffix\n" if $names{$base->{name}}++ || $suffixes{$base->{suffix}}++;
+    }
+    return $bases;
+}
+
+sub read_versions {
+    my ($path) = @_;
+    my $history = read_json($path);
+    die "Expected base-keyed version history\n" unless ref $history eq 'HASH';
+    for my $versions (values %$history) {
+        die "Expected version array\n" unless ref $versions eq 'ARRAY';
+        parse_version($_) for @$versions;
+    }
+    return $history;
 }
 
 sub release_tags {
     my ($version, $latest, $history) = @_;
     my ($major, $minor, $patch, $hash) = parse_version($version);
+    # Rebuilding an older patch must not move the minor tag backward.
+    # Rebuilding the newest patch may refresh it with a new base image.
     my $newest = 1;
     for my $published (@$history) {
         my ($a, $b, $c) = parse_version($published);
@@ -50,15 +84,18 @@ sub release_tags {
 
 sub sources {
     my ($image, $directory) = @_;
-    opendir my $dir, $directory or die "Cannot read $directory: $!\n";
-    my @digests = sort grep { $_ ne '.' && $_ ne '..' } readdir $dir;
-    closedir $dir;
-    die "Expected two architecture digests in $directory\n" unless @digests == 2;
-    for my $digest (@digests) {
-        die "Invalid digest in $directory: $digest\n"
-            unless $digest =~ /\A[0-9a-f]{64}\z/ && -f "$directory/$digest";
+    my @sources;
+    for my $arch ('amd64', 'arm64') {
+        my $path = "$directory/$arch.digest";
+        open my $file, '<', $path or die "Missing $arch digest: $!\n";
+        my $digest = do { local $/; <$file> } // '';
+        close $file or die "Cannot close $path: $!\n";
+        chomp $digest;
+        die "Invalid $arch digest\n" unless $digest =~ /\Asha256:[0-9a-f]{64}\z/;
+        push @sources, "$image\@$digest";
     }
-    return map { "$image\@sha256:$_" } @digests;
+    die "Architecture digests must differ\n" if $sources[0] eq $sources[1];
+    return @sources;
 }
 
 sub registry_token {
@@ -87,67 +124,53 @@ sub dated_tag_exists {
 }
 
 sub publish {
-    my ($image, $version, $latest, $digest_dir, $history) = @_;
+    my ($image, $version, $latest, $digest_dir, $history, $base) = @_;
     my $nightly = $version eq 'nightly';
-    my @release_tags = $nightly ? () : release_tags($version, $latest, $history);
-    my $date = strftime('%Y%m%d', gmtime);
-    my $repository = $image;
-    $repository =~ s{\Aghcr\.io/}{} or die "Expected a ghcr.io image\n";
-
-    # Validate all bases and check dated tags before changing any public tags.
-    my @plans;
-    my $token = $nightly ? registry_token($repository) : undef;
-    for my $base ('trixie', 'bookworm', 'bci16.0') {
-        my $suffix = $base eq 'trixie' ? '' : "-$base";
-        my @sources = sources($image, "$digest_dir/$base");
-        my (@tags, @inspect);
-        if ($nightly) {
-            my $dated = "nightly-$date$suffix";
-            @tags = ("nightly$suffix");
-            if (dated_tag_exists($repository, $dated, $token)) {
-                print "$dated already exists; preserving it\n";
-            } else {
-                push @tags, $dated;
-            }
-            @inspect = ("nightly$suffix", $dated);
+    my $suffix = $base->{suffix};
+    my @sources = sources($image, "$digest_dir/$base->{name}");
+    my (@tags, @inspect);
+    if ($nightly) {
+        my $repository = $image;
+        $repository =~ s{\Aghcr\.io/}{} or die "Expected a ghcr.io image\n";
+        # Date each base at publication time; independent builds may span midnight.
+        my $dated = 'nightly-' . strftime('%Y%m%d', gmtime) . $suffix;
+        @tags = ("nightly$suffix");
+        if (dated_tag_exists($repository, $dated, registry_token($repository))) {
+            print "$dated already exists; preserving it\n";
         } else {
-            @tags = map { "$_$suffix" } @release_tags;
-            @inspect = @tags;
+            push @tags, $dated;
         }
-        push @plans, { tags => \@tags, inspect => \@inspect, sources => \@sources };
+        @inspect = ("nightly$suffix", $dated);
+    } else {
+        @tags = map { "$_$suffix" } release_tags($version, $latest, $history->{$base->{name}} // []);
+        @inspect = @tags;
     }
-    for my $plan (@plans) {
-        run('docker', 'buildx', 'imagetools', 'create',
-            (map { ('-t', "$image:$_") } @{$plan->{tags}}), @{$plan->{sources}});
-        run('docker', 'buildx', 'imagetools', 'inspect', "$image:$_") for @{$plan->{inspect}};
-    }
-}
-
-sub record_version {
-    my ($version, $history) = @_;
-    return if grep { $_ eq $version } @$history;
-    open my $file, '>>', 'versions.txt' or die "Cannot append versions.txt: $!\n";
-    print {$file} "$version\n" or die "Cannot write versions.txt: $!\n";
-    close $file or die "Cannot close versions.txt: $!\n";
-    run('git', 'config', 'user.name', 'github-actions[bot]');
-    run('git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com');
-    run('git', 'add', 'versions.txt');
-    run('git', 'commit', '-m', "Record $version");
-    run('git', 'push');
+    run('docker', 'buildx', 'imagetools', 'create',
+        (map { ('-t', "$image:$_") } @tags), @sources);
+    run('docker', 'buildx', 'imagetools', 'inspect', "$image:$_") for @inspect;
 }
 
 sub main {
     my $image = $ENV{IMAGE} // die "IMAGE is required\n";
     my $version = $ENV{VERSION} // die "VERSION is required\n";
+    my $name = $ENV{BASE} // die "BASE is required\n";
     my $digest_dir = $ENV{DIGEST_DIR} // die "DIGEST_DIR is required\n";
+    my ($base) = grep { $_->{name} eq $name } @{read_bases()};
+    die "Unknown base: $name\n" unless $base;
     my $latest = ($ENV{LATEST} // 'false') eq 'true';
-    # Reruns can check out an old workflow commit. Read current publication
-    # history before deciding whether a minor tag may advance.
-    run('git', 'pull', '--ff-only') unless $version eq 'nightly';
-    my @history = $version eq 'nightly' ? () : read_versions('versions.txt');
-    publish($image, $version, $latest, $digest_dir, \@history);
-    # Record only after all bases have been published and inspected.
-    record_version($version, \@history) unless $version eq 'nightly';
+    my $history = {};
+    if ($version ne 'nightly') {
+        # Refresh history for reruns without giving publication jobs write access.
+        run('git', 'pull', '--ff-only');
+        $history = read_versions('versions.json');
+    }
+    publish($image, $version, $latest, $digest_dir, $history, $base);
+    # This receipt is uploaded only after all publication checks succeed.
+    if ($version ne 'nightly') {
+        my $receipt_dir = $ENV{RECEIPT_DIR} // die "RECEIPT_DIR is required\n";
+        mkdir $receipt_dir unless -d $receipt_dir;
+        write_json("$receipt_dir/$name.json", { base => $name, version => $version });
+    }
 }
 
 main() unless caller;

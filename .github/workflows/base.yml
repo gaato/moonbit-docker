@@ -1,0 +1,119 @@
+name: Build and publish one base
+
+on:
+  workflow_call:
+    inputs:
+      base:
+        required: true
+        type: string
+      image:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      latest:
+        required: true
+        type: boolean
+
+permissions: {}
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/moonbit
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          pull: true
+          no-cache: ${{ inputs.version == 'nightly' }}
+          build-args: |
+            BASE_IMAGE=${{ inputs.image }}
+            MOONBIT_VERSION=${{ inputs.version }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=Unofficial MoonBit toolchain image
+            org.opencontainers.image.version=${{ inputs.version }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Smoke test
+        env:
+          ENGINE: docker
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: ./test.sh "$IMAGE@$DIGEST"
+      - name: Export tested digest
+        env:
+          BASE: ${{ inputs.base }}
+          ARCH: ${{ matrix.arch }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests/$BASE"
+          printf '%s\n' "$DIGEST" > "$RUNNER_TEMP/digests/$BASE/$ARCH.digest"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ inputs.base }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/
+          if-no-files-found: error
+          overwrite: true
+          # Reruns need these artifacts; start a new run after they expire.
+          retention-days: 7
+
+  publish:
+    # Only this base's two architecture jobs gate its publication.
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-${{ inputs.base }}-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish base
+        env:
+          BASE: ${{ inputs.base }}
+          VERSION: ${{ inputs.version }}
+          LATEST: ${{ inputs.latest }}
+          DIGEST_DIR: ${{ runner.temp }}/digests
+          RECEIPT_DIR: ${{ runner.temp }}/receipts
+        run: perl scripts/publish.pl
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: inputs.version != 'nightly'
+        with:
+          name: published-${{ inputs.base }}
+          path: ${{ runner.temp }}/receipts/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
