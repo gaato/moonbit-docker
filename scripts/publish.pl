@@ -94,11 +94,11 @@ sub publish {
     my $repository = $image;
     $repository =~ s{\Aghcr\.io/}{} or die "Expected a ghcr.io image\n";
 
-    # Validate both bases and check dated tags before changing any public tags.
+    # Validate all bases and check dated tags before changing any public tags.
     my @plans;
     my $token = $nightly ? registry_token($repository) : undef;
-    for my $base ('trixie', 'bookworm') {
-        my $suffix = $base eq 'trixie' ? '' : '-bookworm';
+    for my $base ('trixie', 'bookworm', 'bci16.0') {
+        my $suffix = $base eq 'trixie' ? '' : "-$base";
         my @sources = sources($image, "$digest_dir/$base");
         my (@tags, @inspect);
         if ($nightly) {
@@ -146,7 +146,7 @@ sub main {
     run('git', 'pull', '--ff-only') unless $version eq 'nightly';
     my @history = $version eq 'nightly' ? () : read_versions('versions.txt');
     publish($image, $version, $latest, $digest_dir, \@history);
-    # Record only after both bases have been published and inspected.
+    # Record only after all bases have been published and inspected.
     record_version($version, \@history) unless $version eq 'nightly';
 }
 

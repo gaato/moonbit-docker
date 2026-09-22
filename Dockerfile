@@ -10,11 +10,22 @@ ARG MOONBIT_VERSION=latest
 ENV MOON_HOME=/opt/moon
 ENV PATH="${MOON_HOME}/bin:${PATH}"
 
-# gcc/libc6-dev are for the native backend.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        bash ca-certificates curl git gcc libc6-dev \
-    && rm -rf /var/lib/apt/lists/*
+# gcc and libc development headers are for the native backend.
+RUN set -eux; \
+    if command -v apt-get >/dev/null 2>&1; then \
+        apt-get update; \
+        apt-get install -y --no-install-recommends \
+            bash ca-certificates curl git gcc libc6-dev tar gzip; \
+        rm -rf /var/lib/apt/lists/*; \
+    elif command -v zypper >/dev/null 2>&1; then \
+        zypper --non-interactive refresh; \
+        zypper --non-interactive install --no-recommends \
+            bash ca-certificates curl git gcc glibc-devel tar gzip; \
+        zypper --non-interactive clean --all; \
+    else \
+        echo 'Unsupported base image: apt-get or zypper is required' >&2; \
+        exit 1; \
+    fi
 
 RUN set -eux; \
     curl -fsSL https://cli.moonbitlang.com/install/unix.sh \

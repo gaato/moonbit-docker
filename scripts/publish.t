@@ -45,7 +45,9 @@ my $dir = tempdir(CLEANUP => 1);
     is(scalar @git, 0, 'existing release is not committed again');
     chdir $cwd or die $!;
 }
-my %digests = (trixie => ['a' x 64, 'b' x 64], bookworm => ['c' x 64, 'd' x 64]);
+my @bases = ('trixie', 'bookworm', 'bci16.0');
+my %digests = (trixie => ['a' x 64, 'b' x 64], bookworm => ['c' x 64, 'd' x 64],
+    'bci16.0' => ['e' x 64, 'f' x 64]);
 for my $base (keys %digests) {
     mkdir "$dir/$base" or die $!;
     for my $digest (@{$digests{$base}}) {
@@ -61,15 +63,24 @@ my @commands;
     publish('ghcr.io/test/moonbit', '0.10.10+bbb', 1, $dir, ['0.10.9+aaa']);
 }
 my @creates = grep { $_->[3] eq 'create' } @commands;
-is(scalar @creates, 2, 'one manifest per base');
-is_deeply($creates[0], ['docker', 'buildx', 'imagetools', 'create',
-    (map { ('-t', "ghcr.io/test/moonbit:$_") } qw(0.10.10 0.10.10-bbb 0.10 latest)),
-    (map { "ghcr.io/test/moonbit\@sha256:$_" } @{$digests{trixie}})], 'trixie tags and sources');
-is_deeply($creates[1], ['docker', 'buildx', 'imagetools', 'create',
-    (map { ('-t', "ghcr.io/test/moonbit:$_-bookworm") } qw(0.10.10 0.10.10-bbb 0.10 latest)),
-    (map { "ghcr.io/test/moonbit\@sha256:$_" } @{$digests{bookworm}})], 'bookworm tags and sources');
+is(scalar @creates, 3, 'one manifest per base');
+for my $i (0 .. $#bases) {
+    my $base = $bases[$i];
+    my $suffix = $base eq 'trixie' ? '' : "-$base";
+    is_deeply($creates[$i], ['docker', 'buildx', 'imagetools', 'create',
+        (map { ('-t', "ghcr.io/test/moonbit:$_$suffix") } qw(0.10.10 0.10.10-bbb 0.10 latest)),
+        (map { "ghcr.io/test/moonbit\@sha256:$_" } @{$digests{$base}})], "$base tags and sources");
+}
 
-for my $statuses ([200, 404], [404, 200], [404, 404], [200, 200], [404, 503]) {
+# Cover all combinations of existing/missing dated tags across the three bases.
+my @status_cases;
+for my $a (200, 404) {
+    for my $b (200, 404) {
+        push @status_cases, [$a, $b, $_] for (200, 404);
+    }
+}
+push @status_cases, [404, 404, 503];
+for my $statuses (@status_cases) {
     @commands = ();
     my @urls;
     my @responses = @$statuses;
@@ -83,23 +94,25 @@ for my $statuses ([200, 404], [404, 200], [404, 404], [200, 200], [404, 503]) {
         };
         eval { publish('ghcr.io/test/moonbit', 'nightly', 0, $dir, []) };
     }
-    if ($statuses->[1] == 503) {
+    if ($statuses->[2] == 503) {
         like($@, qr/HTTP 503/, 'registry failure aborts');
-        is(scalar @commands, 0, 'both bases checked before any publication');
+        is(scalar @commands, 0, 'all bases checked before any publication');
         next;
     }
     is($@, '', "nightly statuses @$statuses succeed");
     my ($date) = $urls[0] =~ /nightly-(\d{8})\z/;
     ok($date, 'UTC date-shaped tag');
-    like($urls[1], qr/nightly-$date-bookworm\z/, 'same date for both bases');
+    like($urls[1], qr/nightly-$date-bookworm\z/, 'same date for bookworm');
+    like($urls[2], qr/nightly-$date-bci16\.0\z/, 'same date for BCI');
     my @nightly_creates = grep { $_->[3] eq 'create' } @commands;
-    for my $i (0, 1) {
-        my $suffix = $i ? '-bookworm' : '';
+    for my $i (0 .. $#bases) {
+        my $base = $bases[$i];
+        my $suffix = $base eq 'trixie' ? '' : "-$base";
         my @expected = ('docker', 'buildx', 'imagetools', 'create',
             '-t', "ghcr.io/test/moonbit:nightly$suffix");
         push @expected, '-t', "ghcr.io/test/moonbit:nightly-$date$suffix" if $statuses->[$i] == 404;
         push @expected, map { "ghcr.io/test/moonbit\@sha256:$_" }
-            @{$digests{$i ? 'bookworm' : 'trixie'}};
+            @{$digests{$base}};
         is_deeply($nightly_creates[$i], \@expected, 'only absent dated tags are published');
     }
 }
@@ -136,7 +149,7 @@ for my $statuses ([200, 404], [404, 200], [404, 404], [200, 200], [404, 503]) {
     is($events[-1], 'record version', 'record only after all publications');
 }
 
-unlink "$dir/bookworm/$digests{bookworm}[0]" or die $!;
+unlink "$dir/bci16.0/$digests{'bci16.0'}[0]" or die $!;
 @commands = ();
 {
     no warnings 'redefine';

@@ -24,7 +24,8 @@ podman run --rm -it -v "$PWD:/work:Z" ghcr.io/gaato/moonbit:latest moon test
 Use `:nightly` instead of `:latest` to try the nightly toolchain.
 Tags without a distribution suffix use Debian trixie. Append `-bookworm`
 to any tag (for example, `latest-bookworm` or `nightly-bookworm`) to use
-Debian bookworm instead. Both variants use Debian's slim base images.
+Debian bookworm instead, or `-bci16.0` for SUSE BCI 16.0. The Debian variants
+use slim base images; the SUSE variant uses BCI Base.
 
 ## As a build stage
 
@@ -42,6 +43,7 @@ Native binaries link dynamically against the builder's glibc (Debian 13,
 glibc 2.41 by default), so the runtime image needs the same glibc or newer,
 along with any other required shared libraries. Use a `-bookworm` builder
 for Debian 12 runtimes (glibc 2.36).
+Use a `-bci16.0` builder for SUSE BCI 16.0 runtimes (glibc 2.40).
 
 ## Tags
 
@@ -54,8 +56,9 @@ for Debian 12 runtimes (glibc 2.36).
 | `0.10.14` | Release version without the build hash |
 | `0.10.14-7d59c7ec9` | Exact upstream version `0.10.14+7d59c7ec9` |
 
-New builds also provide a `-bookworm` variant of each tag, such as `0.10-bookworm` or
-`nightly-YYYYMMDD-bookworm`. Minor tags stay within their series: `0.10`
+New builds also provide `-bookworm` and `-bci16.0` variants of each tag,
+such as `0.10-bookworm`, `0.10-bci16.0`, `0.10.14-7d59c7ec9-bci16.0`,
+or `nightly-YYYYMMDD-bci16.0`. Minor tags stay within their series: `0.10`
 does not move to `0.11`, and rebuilding an older patch does not move it
 backward. Rebuilding the newest patch can update its minor tag.
 
@@ -70,16 +73,18 @@ Existing dated nightlies are not backfilled with new distribution variants eithe
 
 ## What is inside
 
-- `debian:trixie-slim` (glibc 2.41), or `debian:bookworm-slim` (glibc 2.36)
-  for `-bookworm` tags, with `git`, `curl`, and `gcc`/`libc6-dev` for the native backend
+- `debian:trixie-slim` (glibc 2.41) by default, `debian:bookworm-slim`
+  (glibc 2.36) for `-bookworm` tags, or `registry.suse.com/bci/bci-base:16.0`
+  (glibc 2.40) for `-bci16.0` tags
+- `git`, `curl`, `gcc`, and libc development headers for the native backend
 - MoonBit in `/opt/moon` (`MOON_HOME`), checked against upstream's SHA-256 list
   at build time and writable by any UID, so `--user` and
   `--userns=keep-id` work
 
 ## Updates
 
-Daily workflows check for new releases and rebuild nightly images. Both
-distributions on both architectures must pass smoke tests before tags are
+Daily workflows check for new releases and rebuild nightly images. All three
+base images on both architectures must pass smoke tests before tags are
 published.
 
 To publish a specific release manually, run the Build workflow with its upstream

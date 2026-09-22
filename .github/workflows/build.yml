@@ -65,7 +65,13 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        base: [trixie, bookworm]
+        base:
+          - name: trixie
+            image: debian:trixie-slim
+          - name: bookworm
+            image: debian:bookworm-slim
+          - name: bci16.0
+            image: registry.suse.com/bci/bci-base:16.0
         arch: [amd64, arm64]
         include:
           - arch: amd64
@@ -94,7 +100,7 @@ jobs:
           context: .
           platforms: linux/${{ matrix.arch }}
           build-args: |
-            BASE_IMAGE=debian:${{ matrix.base }}-slim
+            BASE_IMAGE=${{ matrix.base.image }}
             MOONBIT_VERSION=${{ needs.check.outputs.version }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -114,12 +120,12 @@ jobs:
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
-          mkdir -p "$RUNNER_TEMP/digests/${{ matrix.base }}"
-          touch "$RUNNER_TEMP/digests/${{ matrix.base }}/${DIGEST#sha256:}"
+          mkdir -p "$RUNNER_TEMP/digests/${{ matrix.base.name }}"
+          touch "$RUNNER_TEMP/digests/${{ matrix.base.name }}/${DIGEST#sha256:}"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: digest-${{ matrix.base }}-${{ matrix.arch }}
+          name: digest-${{ matrix.base.name }}-${{ matrix.arch }}
           path: ${{ runner.temp }}/digests/
           if-no-files-found: error
           retention-days: 1
