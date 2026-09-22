@@ -33,6 +33,7 @@ goes to `_build/`, not `target/` as older articles say.
 |---|---|
 | `latest` | Current upstream release |
 | `nightly` | Upstream nightly, rebuilt daily |
+| `nightly-20260922` | First successful nightly publication on that UTC date; never overwritten by the workflow |
 | `0.10.14` | That release (`+` is not valid in a tag, so the build hash is dropped) |
 | `0.10.14-7d59c7ec9` | Same, with the upstream build hash (`0.10.14+7d59c7ec9`) |
 
@@ -59,6 +60,11 @@ A separate daily workflow rebuilds `nightly` without the build cache. Both
 architectures must pass the same smoke tests before the `nightly` tag is
 updated. Nightly builds do not change `latest` or `versions.txt`; the nightly
 workflow can also be run manually.
+
+Each publication also creates a `nightly-YYYYMMDD` tag if it does not already
+exist, using the UTC date at publication time. Later runs on the same date
+update only `nightly`, preserving the first successful image for that date.
+Use a dated tag or an image digest to pin a nightly build.
 
 ```fish
 podman run --rm -it -v "$PWD:/work:Z" ghcr.io/gaato/moonbit:nightly moon test

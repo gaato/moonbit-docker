@@ -2,7 +2,7 @@ name: Build nightly
 
 on:
   schedule:
-    - cron: "47 3 * * *"
+    - cron: "10 0 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -105,7 +105,29 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           set -euo pipefail
+          # Use the UTC publication date, including for manual reruns.
+          dated_tag="nightly-$(date -u +%Y%m%d)"
+          repository=${IMAGE#ghcr.io/}
+          # Anonymous pull access is sufficient for this public package.
+          token=$(curl -fsS --get https://ghcr.io/token \
+            --data-urlencode service=ghcr.io \
+            --data-urlencode "scope=repository:$repository:pull" \
+            | jq -er '.token | select(type == "string" and length > 0)')
+          status=$(curl -sS --head --output /dev/null --write-out '%{http_code}' \
+            --header "Authorization: Bearer $token" \
+            --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+            "https://ghcr.io/v2/$repository/manifests/$dated_tag")
+          tags=(-t "$IMAGE:nightly")
+          case "$status" in
+            200) echo "$dated_tag already exists; preserving it" ;;
+            404) tags+=(-t "$IMAGE:$dated_tag") ;;
+            *)
+              echo "::error::Cannot check $dated_tag: HTTP $status"
+              exit 1
+              ;;
+          esac
           sources=()
           for digest in *; do sources+=("$IMAGE@sha256:$digest"); done
-          docker buildx imagetools create -t "$IMAGE:nightly" "${sources[@]}"
+          docker buildx imagetools create "${tags[@]}" "${sources[@]}"
           docker buildx imagetools inspect "$IMAGE:nightly"
+          docker buildx imagetools inspect "$IMAGE:$dated_tag"
