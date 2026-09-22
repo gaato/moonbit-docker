@@ -1,15 +1,21 @@
 # moonbit-docker
 
-Unofficial container images of the [MoonBit](https://www.moonbitlang.com/)
-toolchain, rebuilt automatically whenever upstream publishes a new release.
+Unofficial [MoonBit](https://www.moonbitlang.com/) toolchain images for
+`linux/amd64` and `linux/arm64`, with release and nightly tags.
 
 This project is not affiliated with the MoonBit team. The images contain the
 upstream binaries as installed by the official install script; see
 [License](#license).
 
-```sh
-podman run --rm -it -v "$PWD:/work:Z" ghcr.io/gaato/moonbit moon test
+## Usage
+
+Run tests in the current directory:
+
+```fish
+podman run --rm -it -v "$PWD:/work:Z" ghcr.io/gaato/moonbit:latest moon test
 ```
+
+Use `:nightly` instead of `:latest` to try the nightly toolchain.
 
 ## As a build stage
 
@@ -24,8 +30,7 @@ ENTRYPOINT ["/app"]
 ```
 
 Native binaries link dynamically against the builder's glibc (Debian 13,
-glibc 2.41), so the runtime image needs the same glibc or newer. Build output
-goes to `_build/`, not `target/` as older articles say.
+glibc 2.41), so the runtime image needs the same glibc or newer.
 
 ## Tags
 
@@ -33,14 +38,16 @@ goes to `_build/`, not `target/` as older articles say.
 |---|---|
 | `latest` | Current upstream release |
 | `nightly` | Upstream nightly, rebuilt daily |
-| `nightly-20260922` | First successful nightly publication on that UTC date; never overwritten by the workflow |
-| `0.10.14` | That release (`+` is not valid in a tag, so the build hash is dropped) |
-| `0.10.14-7d59c7ec9` | Same, with the upstream build hash (`0.10.14+7d59c7ec9`) |
+| `nightly-YYYYMMDD` | First successful nightly image published on that UTC date |
+| `0.10.14` | Release version without the build hash |
+| `0.10.14-7d59c7ec9` | Exact upstream version `0.10.14+7d59c7ec9` |
 
-Release version tags are built once and never rebuilt, so they do not pick up base
-image updates. Images are published for `linux/amd64` and `linux/arm64`.
-[`versions.txt`](versions.txt) lists every release version that has been built;
-versions released before this repository existed are not backfilled.
+Dated nightly tags are preserved on subsequent runs that day. Use a dated
+tag or an image digest to pin a nightly build.
+
+Release images are built when a new upstream version is detected; they do
+not receive automatic base image updates. [`versions.txt`](versions.txt)
+lists published releases. Older releases are not backfilled.
 
 ## What is inside
 
@@ -49,28 +56,12 @@ versions released before this repository existed are not backfilled.
   at build time and writable by any UID, so `--user` and
   `--userns=keep-id` work
 
-## How it works
+## Updates
 
-A daily workflow reads <https://cli.moonbitlang.com/version.json>. If the
-version is not in `versions.txt`, it builds both architectures on native
-runners, publishes the manifest list, and appends the version to
-`versions.txt`.
+Daily workflows check for new releases and rebuild nightly images. Both
+architectures must pass smoke tests before tags are published.
 
-A separate daily workflow rebuilds `nightly` without the build cache. Both
-architectures must pass the same smoke tests before the `nightly` tag is
-updated. Nightly builds do not change `latest` or `versions.txt`; the nightly
-workflow can also be run manually.
-
-Each publication also creates a `nightly-YYYYMMDD` tag if it does not already
-exist, using the UTC date at publication time. Later runs on the same date
-update only `nightly`, preserving the first successful image for that date.
-Use a dated tag or an image digest to pin a nightly build.
-
-```fish
-podman run --rm -it -v "$PWD:/work:Z" ghcr.io/gaato/moonbit:nightly moon test
-```
-
-To build a specific version by hand, run the workflow with the exact upstream
+To publish a specific release manually, run the Build workflow with its upstream
 version string (`0.10.14+7d59c7ec9`). Upstream only keeps recent releases;
 for older ones see [moonbit-binaries](https://github.com/chawyehsu/moonbit-binaries).
 
