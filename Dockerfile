@@ -22,8 +22,12 @@ RUN set -eux; \
         zypper --non-interactive install --no-recommends \
             bash ca-certificates curl git gcc glibc-devel tar gzip; \
         zypper --non-interactive clean --all; \
+    elif command -v microdnf >/dev/null 2>&1; then \
+        microdnf --assumeyes --setopt=install_weak_deps=0 install \
+            bash ca-certificates curl-minimal git-core gcc glibc-devel tar gzip; \
+        microdnf clean all; \
     else \
-        echo 'Unsupported base image: apt-get or zypper is required' >&2; \
+        echo 'Unsupported base image: apt-get, zypper or microdnf is required' >&2; \
         exit 1; \
     fi
 

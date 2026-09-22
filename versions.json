@@ -4,5 +4,7 @@
   "bci16.0": [],
   "tumbleweed": [],
   "ubuntu24.04": [],
-  "ubuntu26.04": []
+  "ubuntu26.04": [],
+  "ubi9": [],
+  "ubi10": []
 }

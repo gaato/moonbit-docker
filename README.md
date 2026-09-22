@@ -66,6 +66,8 @@ choose another base, for example `0.10-bookworm` or `nightly-tumbleweed`.
 | `-tumbleweed` | `registry.opensuse.org/opensuse/tumbleweed:latest` |
 | `-ubuntu24.04` | `ubuntu:24.04` |
 | `-ubuntu26.04` | `ubuntu:26.04` |
+| `-ubi9` | `registry.access.redhat.com/ubi9/ubi-minimal:latest` |
+| `-ubi10` | `registry.access.redhat.com/ubi10/ubi-minimal:latest` |
 
 All variants contain the upstream MoonBit toolchain in `/opt/moon`, plus
 `git`, `curl`, `gcc`, and libc development headers. The toolchain directory

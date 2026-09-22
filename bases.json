@@ -4,5 +4,7 @@
   {"name": "bci16.0", "image": "registry.suse.com/bci/bci-base:16.0", "suffix": "-bci16.0"},
   {"name": "tumbleweed", "image": "registry.opensuse.org/opensuse/tumbleweed:latest", "suffix": "-tumbleweed"},
   {"name": "ubuntu24.04", "image": "ubuntu:24.04", "suffix": "-ubuntu24.04"},
-  {"name": "ubuntu26.04", "image": "ubuntu:26.04", "suffix": "-ubuntu26.04"}
+  {"name": "ubuntu26.04", "image": "ubuntu:26.04", "suffix": "-ubuntu26.04"},
+  {"name": "ubi9", "image": "registry.access.redhat.com/ubi9/ubi-minimal:latest", "suffix": "-ubi9"},
+  {"name": "ubi10", "image": "registry.access.redhat.com/ubi10/ubi-minimal:latest", "suffix": "-ubi10"}
 ]
