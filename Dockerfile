@@ -1,4 +1,5 @@
-FROM debian:trixie-slim
+ARG BASE_IMAGE=debian:trixie-slim
+FROM ${BASE_IMAGE}
 
 # Exact upstream version such as "0.10.14+7d59c7ec9", "latest", or "nightly".
 ARG MOONBIT_VERSION=latest

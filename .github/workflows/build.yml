@@ -65,6 +65,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
+        base: [trixie, bookworm]
+        arch: [amd64, arm64]
         include:
           - arch: amd64
             runner: ubuntu-24.04
@@ -92,6 +94,7 @@ jobs:
           context: .
           platforms: linux/${{ matrix.arch }}
           build-args: |
+            BASE_IMAGE=debian:${{ matrix.base }}-slim
             MOONBIT_VERSION=${{ needs.check.outputs.version }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -111,13 +114,13 @@ jobs:
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
-          mkdir -p "$RUNNER_TEMP/digests"
-          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+          mkdir -p "$RUNNER_TEMP/digests/${{ matrix.base }}"
+          touch "$RUNNER_TEMP/digests/${{ matrix.base }}/${DIGEST#sha256:}"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: digest-${{ matrix.arch }}
-          path: ${{ runner.temp }}/digests/*
+          name: digest-${{ matrix.base }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/
           if-no-files-found: error
           retention-days: 1
 
@@ -129,6 +132,9 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Test publication logic
+        run: prove scripts/publish.t
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -144,32 +150,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create manifest list
-        working-directory: ${{ runner.temp }}/digests
+      - name: Publish images
         env:
+          DIGEST_DIR: ${{ runner.temp }}/digests
           VERSION: ${{ needs.check.outputs.version }}
           LATEST: ${{ needs.check.outputs.latest }}
-        run: |
-          set -euo pipefail
-          # "+" is not allowed in image tags: 0.10.14+7d59c7ec9 -> 0.10.14, 0.10.14-7d59c7ec9
-          tags=(-t "$IMAGE:${VERSION%%+*}" -t "$IMAGE:${VERSION/+/-}")
-          if [[ $LATEST == true ]]; then tags+=(-t "$IMAGE:latest"); fi
-          sources=()
-          for digest in *; do sources+=("$IMAGE@sha256:$digest"); done
-          docker buildx imagetools create "${tags[@]}" "${sources[@]}"
-          docker buildx imagetools inspect "$IMAGE:${VERSION/+/-}"
-
-      # Doubles as the "already built" state and as repository activity, which
-      # keeps GitHub from disabling the schedule after 60 idle days.
-      - name: Record version
-        env:
-          VERSION: ${{ needs.check.outputs.version }}
-        run: |
-          set -euo pipefail
-          if grep -qxF "$VERSION" versions.txt; then exit 0; fi
-          echo "$VERSION" >> versions.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add versions.txt
-          git commit -m "Record $VERSION"
-          git push
+        run: perl scripts/publish.pl

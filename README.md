@@ -22,6 +22,9 @@ podman run --rm -it -v "$PWD:/work:Z" ghcr.io/gaato/moonbit:latest moon test
 ```
 
 Use `:nightly` instead of `:latest` to try the nightly toolchain.
+Tags without a distribution suffix use Debian trixie. Append `-bookworm`
+to any tag (for example, `latest-bookworm` or `nightly-bookworm`) to use
+Debian bookworm instead. Both variants use Debian's slim base images.
 
 ## As a build stage
 
@@ -36,7 +39,9 @@ ENTRYPOINT ["/app"]
 ```
 
 Native binaries link dynamically against the builder's glibc (Debian 13,
-glibc 2.41), so the runtime image needs the same glibc or newer.
+glibc 2.41 by default), so the runtime image needs the same glibc or newer,
+along with any other required shared libraries. Use a `-bookworm` builder
+for Debian 12 runtimes (glibc 2.36).
 
 ## Tags
 
@@ -45,19 +50,28 @@ glibc 2.41), so the runtime image needs the same glibc or newer.
 | `latest` | Current upstream release |
 | `nightly` | Upstream nightly, rebuilt daily |
 | `nightly-YYYYMMDD` | First successful nightly image published on that UTC date |
+| `0.10` | Latest published patch release in the `0.10.x` series |
 | `0.10.14` | Release version without the build hash |
 | `0.10.14-7d59c7ec9` | Exact upstream version `0.10.14+7d59c7ec9` |
 
+New builds also provide a `-bookworm` variant of each tag, such as `0.10-bookworm` or
+`nightly-YYYYMMDD-bookworm`. Minor tags stay within their series: `0.10`
+does not move to `0.11`, and rebuilding an older patch does not move it
+backward. Rebuilding the newest patch can update its minor tag.
+
 Dated nightly tags are preserved on subsequent runs that day. Use a dated
-tag or an image digest to pin a nightly build.
+tag or an image digest to pin a nightly build. Preservation is checked
+separately for each distribution.
 
 Release images are built when a new upstream version is detected; they do
 not receive automatic base image updates. [`versions.txt`](versions.txt)
 lists published releases. Older releases are not backfilled.
+Existing dated nightlies are not backfilled with new distribution variants either.
 
 ## What is inside
 
-- `debian:trixie-slim` (glibc 2.41) with `git`, `curl`, and `gcc`/`libc6-dev` for the native backend
+- `debian:trixie-slim` (glibc 2.41), or `debian:bookworm-slim` (glibc 2.36)
+  for `-bookworm` tags, with `git`, `curl`, and `gcc`/`libc6-dev` for the native backend
 - MoonBit in `/opt/moon` (`MOON_HOME`), checked against upstream's SHA-256 list
   at build time and writable by any UID, so `--user` and
   `--userns=keep-id` work
@@ -65,11 +79,16 @@ lists published releases. Older releases are not backfilled.
 ## Updates
 
 Daily workflows check for new releases and rebuild nightly images. Both
-architectures must pass smoke tests before tags are published.
+distributions on both architectures must pass smoke tests before tags are
+published.
 
 To publish a specific release manually, run the Build workflow with its upstream
 version string (`0.10.14+7d59c7ec9`). Upstream only keeps recent releases;
 for older ones see [moonbit-binaries](https://github.com/chawyehsu/moonbit-binaries).
+
+Publication logic lives in `scripts/publish.pl` and uses only standard Perl
+modules plus the existing `curl`, `docker`, and `git` tools. Run its tests with
+`prove scripts/publish.t`; the tests do not contact the registry or publish images.
 
 ## License
 
