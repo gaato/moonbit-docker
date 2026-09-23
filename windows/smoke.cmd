@@ -1,8 +1,8 @@
 @echo off
 call C:\BuildTools\Common7\Tools\VsDevCmd.bat -arch=amd64
 if errorlevel 1 exit /b 1
-set "PATH=C:\moon\bin;%PATH%"
 where cl.exe || exit /b 1
+where moon.exe || exit /b 1
 moon.exe version --all || exit /b 1
 mkdir C:\probe || exit /b 1
 cd /d C:\probe || exit /b 1

@@ -14,7 +14,6 @@ RUN curl -fSL -o C:\vs_buildtools.exe https://aka.ms/vs/17/release/vs_buildtools
 
 ARG MOONBIT_VERSION=latest
 ENV MOON_HOME=C:\moon
-ENV PATH="C:\moon\bin;${PATH}"
 ENV MOONBIT_INSTALL_VERSION=${MOONBIT_VERSION}
 COPY windows/install.ps1 C:/install.ps1
 RUN powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\install.ps1

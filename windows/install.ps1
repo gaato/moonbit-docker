@@ -8,4 +8,9 @@ if ($LASTEXITCODE -ne 0) { throw "MoonBit installer failed with exit code $LASTE
 & "$env:MOON_HOME\bin\moon.exe" version --all
 if ($LASTEXITCODE -ne 0) { throw "moon version failed with exit code $LASTEXITCODE" }
 
+# Windows base images keep Path in the machine environment. Replacing it with
+# Dockerfile ENV PATH can hide system tools such as powershell.exe.
+$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+[Environment]::SetEnvironmentVariable('Path', "$env:MOON_HOME\bin;$machinePath", 'Machine')
+
 Remove-Item 'C:\moonbit-installer.ps1'
