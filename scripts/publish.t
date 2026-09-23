@@ -142,17 +142,14 @@ for my $aliases (['-bookworm'], ['-trixie', '-trixie'], ['bad suffix'], 'not-an-
 write_json('bases.json', $bases);
 
 for my $invalid (
-    {%{$bases->[2]}, os => 'unknown'},
-    {%{$bases->[2]}, architectures => ['amd64', 'arm64']},
+    {%{$bases->[0]}, architectures => ['amd64']},
+    {%{$bases->[0]}, os => 'windows'},
+    {%{$bases->[0]}, runner => 'windows-2022'},
 ) {
-    write_json('bases.json', [$bases->[0], $bases->[1], $invalid]);
+    write_json('bases.json', [$invalid, $bases->[1]]);
     eval { read_bases() };
-    like($@, qr/Invalid base platform/, 'invalid OS or architecture set rejected');
+    like($@, qr/Invalid base architectures|Unsupported base platform/, 'unsupported platform rejected');
 }
-write_json('bases.json', $bases);
-write_json('bases.json', [$bases->[0], $bases->[1], {%{$bases->[3]}, runner => 'windows-2022-invalid'}]);
-eval { read_bases() };
-like($@, qr/Invalid base runner/, 'invalid Windows runner rejected');
 write_json('bases.json', $bases);
 
 # One base's incomplete architecture set does not prevent another publication.
@@ -166,16 +163,6 @@ unlink 'digests/trixie/arm64.digest' or die $!;
     is(scalar @commands, 0, 'failed base publishes nothing');
     publish('ghcr.io/test/moonbit', $version, 0, 'digests', {}, $bases->[1]);
     ok(@commands, 'another base can still publish');
-}
-
-for my $base (@$bases[2, 3]) {
-    unlink "digests/$base->{name}/amd64.digest" or die $!;
-    no warnings 'redefine';
-    my @commands;
-    local *main::run = sub { push @commands, [@_] };
-    eval { publish('ghcr.io/test/moonbit', $version, 0, 'digests', {}, $base) };
-    like($@, qr/Missing amd64/, "$base->{name}: missing digest blocks publication");
-    is(scalar @commands, 0, "$base->{name}: failed build publishes no tags");
 }
 
 # Publisher never commits history; receipts follow successful publication only.

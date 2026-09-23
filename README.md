@@ -7,8 +7,7 @@
 [![License](https://img.shields.io/github/license/gaato/moonbit-docker)](LICENSE.md)
 
 Unofficial [MoonBit](https://www.moonbitlang.com/) toolchain images for
-`linux/amd64`, `linux/arm64`, and Windows Server Core `windows/amd64`,
-with release and nightly tags.
+`linux/amd64` and `linux/arm64`, with release and nightly tags.
 
 This project is not affiliated with the MoonBit team. The images contain the
 upstream binaries as installed by the official install script; see
@@ -57,25 +56,17 @@ jobs:
 ## Bases
 
 Tags without a suffix use Debian trixie and point to the same images as
-`-trixie` tags. Append a suffix to any tag to
-choose another base, for example `0.10-bookworm` or
-`0.10-windowsservercore-ltsc2025`.
+`-trixie` tags. Use `-bookworm` to choose Debian 12, for example
+`0.10-bookworm`.
 
 | Tag suffix | Base image |
 |---|---|
 | none or `-trixie` | `debian:trixie-slim` |
 | `-bookworm` | `debian:bookworm-slim` |
-| `-windowsservercore-ltsc2022` | `mcr.microsoft.com/dotnet/framework/runtime:4.8-windowsservercore-ltsc2022` |
-| `-windowsservercore-ltsc2025` | `mcr.microsoft.com/dotnet/framework/runtime:4.8.1-windowsservercore-ltsc2025` |
 
 The Debian variants contain the upstream MoonBit toolchain in `/opt/moon`, plus
 `git`, `curl`, `gcc`, and libc development headers. The toolchain directory
 is writable by any UID, allowing use with `--user` or `--userns=keep-id`.
-
-The Windows variants contain the upstream Windows toolchain in `C:\moon` and
-Visual Studio Build Tools for native builds. They run on Windows hosts with
-Windows containers enabled. Before a native build in a shell, initialize the
-MSVC environment with `C:\BuildTools\Common7\Tools\VsDevCmd.bat -arch=amd64`.
 
 ## Tags
 
@@ -94,12 +85,10 @@ pin an exact image.
 
 ## Updates
 
-Each Debian base is published once both `linux/amd64` and `linux/arm64` pass
-smoke tests. Each Windows Server Core base is published after its
-`windows/amd64` test passes. Bases publish independently, so a failed build
-can leave one base on an older version. See [`versions.json`](versions.json)
-for published releases by base. Existing tags for removed Linux bases remain
-in the registry but are no longer updated.
+Each base is published once both `linux/amd64` and `linux/arm64` pass smoke
+tests. Bases publish independently, so a failed build can leave one base on
+an older version. See [`versions.json`](versions.json) for published releases
+by base.
 
 Daily workflows check for new releases and rebuild nightly images. Release
 images do not receive automatic base image updates. Older releases and dated

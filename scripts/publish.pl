@@ -51,14 +51,9 @@ sub read_bases {
             && ($base->{image} // '') =~ /\A[a-z0-9][a-z0-9.:\/-]*\z/
             && defined $base->{suffix} && $base->{suffix} =~ /\A(?:-[a-z0-9][a-z0-9.-]*)?\z/;
         die "Duplicate base name\n" if $names{$base->{name}}++;
-        die "Invalid base platform\n" unless ($base->{os} // '') =~ /\A(?:linux|windows)\z/
-            && ref $base->{architectures} eq 'ARRAY'
-            && join(',', @{$base->{architectures}}) eq
-                ($base->{os} eq 'windows' ? 'amd64' : 'amd64,arm64');
-        my $runner_valid = $base->{os} eq 'windows'
-            ? ($base->{runner} // '') =~ /\Awindows-(?:2022|2025)\z/
-            : !exists $base->{runner};
-        die "Invalid base runner\n" unless $runner_valid;
+        die "Invalid base architectures\n" unless ref $base->{architectures} eq 'ARRAY'
+            && join(',', @{$base->{architectures}}) eq 'amd64,arm64';
+        die "Unsupported base platform\n" if exists $base->{os} || exists $base->{runner};
         die "Expected alias array\n" if exists $base->{aliases} && ref $base->{aliases} ne 'ARRAY';
         for my $suffix ($base->{suffix}, @{$base->{aliases} // []}) {
             die "Invalid tag suffix\n" unless defined $suffix && $suffix =~ /\A(?:-[a-z0-9][a-z0-9.-]*)?\z/;

@@ -1,6 +1,4 @@
 [
-  {"name": "trixie", "image": "debian:trixie-slim", "suffix": "", "aliases": ["-trixie"], "os": "linux", "architectures": ["amd64", "arm64"]},
-  {"name": "bookworm", "image": "debian:bookworm-slim", "suffix": "-bookworm", "os": "linux", "architectures": ["amd64", "arm64"]},
-  {"name": "windowsservercore-ltsc2022", "image": "mcr.microsoft.com/dotnet/framework/runtime:4.8-windowsservercore-ltsc2022", "suffix": "-windowsservercore-ltsc2022", "os": "windows", "architectures": ["amd64"], "runner": "windows-2022"},
-  {"name": "windowsservercore-ltsc2025", "image": "mcr.microsoft.com/dotnet/framework/runtime:4.8.1-windowsservercore-ltsc2025", "suffix": "-windowsservercore-ltsc2025", "os": "windows", "architectures": ["amd64"], "runner": "windows-2025"}
+  {"name": "trixie", "image": "debian:trixie-slim", "suffix": "", "aliases": ["-trixie"], "architectures": ["amd64", "arm64"]},
+  {"name": "bookworm", "image": "debian:bookworm-slim", "suffix": "-bookworm", "architectures": ["amd64", "arm64"]}
 ]
