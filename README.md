@@ -55,12 +55,13 @@ jobs:
 
 ## Bases
 
-Tags without a suffix use Debian trixie. Append a suffix to any tag to
+Tags without a suffix use Debian trixie and point to the same images as
+`-trixie` tags. Append a suffix to any tag to
 choose another base, for example `0.10-bookworm` or `nightly-tumbleweed`.
 
 | Tag suffix | Base image |
 |---|---|
-| none | `debian:trixie-slim` |
+| none or `-trixie` | `debian:trixie-slim` |
 | `-bookworm` | `debian:bookworm-slim` |
 | `-bci16.0` | `registry.suse.com/bci/bci-base:16.0` |
 | `-tumbleweed` | `registry.opensuse.org/opensuse/tumbleweed:latest` |

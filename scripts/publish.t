@@ -58,8 +58,10 @@ for my $base (@$bases) {
     }
     my @tags = ('0.10.10', '0.10.10-bbb');
     push @tags, '0.10' unless $base->{name} eq 'trixie';
+    my @suffixes = $base->{name} eq 'trixie' ? ('', '-trixie') : ($base->{suffix});
+    my @release_tags = map { my $tag = $_; map { "$tag$_" } @suffixes } @tags;
     is_deeply($commands[0], ['docker', 'buildx', 'imagetools', 'create',
-        (map { ('-t', "ghcr.io/test/moonbit:$_$base->{suffix}") } @tags),
+        (map { ('-t', "ghcr.io/test/moonbit:$_") } @release_tags),
         (map { "ghcr.io/test/moonbit\@$digests{$base->{name}}{$_}" } qw(amd64 arm64))],
         "$base->{name}: isolated tags, history, and sources");
 
@@ -83,16 +85,61 @@ for my $base (@$bases) {
             is($@, '', "$base->{name}: nightly status $status succeeds");
             my ($date) = $url =~ /nightly-(\d{8})/;
             ok($date, 'publication has a UTC date');
-            my $dated = "ghcr.io/test/moonbit:nightly-$date$base->{suffix}";
+            my @dated = map { "ghcr.io/test/moonbit:nightly-$date$_" } @suffixes;
             my @expected = ('docker', 'buildx', 'imagetools', 'create',
-                '-t', "ghcr.io/test/moonbit:nightly$base->{suffix}");
-            push @expected, '-t', $dated if $status == 404;
+                (map { ('-t', "ghcr.io/test/moonbit:nightly$_") } @suffixes));
+            push @expected, map { ('-t', $_) } @dated if $status == 404;
             push @expected, map { "ghcr.io/test/moonbit\@$digests{$base->{name}}{$_}" } qw(amd64 arm64);
             is_deeply($commands[0], \@expected, 'dated tag is created only when absent');
-            is($commands[-1][-1], $dated, 'dated tag inspected even if preserved');
+            is($commands[-1][-1], $dated[-1], 'dated tag inspected even if preserved');
         }
     }
 }
+
+# Both release aliases are attached to one index, including moving tags.
+{
+    no warnings 'redefine';
+    my @commands;
+    local *main::run = sub { push @commands, [@_] };
+    publish('ghcr.io/test/moonbit', $version, 1, 'digests', {}, $bases->[0]);
+    is_deeply($commands[0], ['docker', 'buildx', 'imagetools', 'create',
+        (map { ('-t', "ghcr.io/test/moonbit:$_") }
+            qw(0.10.10 0.10.10-trixie 0.10.10-bbb 0.10.10-bbb-trixie 0.10 0.10-trixie latest latest-trixie)),
+        (map { "ghcr.io/test/moonbit\@$digests{trixie}{$_}" } qw(amd64 arm64))],
+        'all release aliases share one index creation');
+}
+
+# Adding an alias mid-day (or retrying a partial publication) must preserve the
+# original dated image. Either spelling can be the surviving tag.
+for my $existing_suffix ('', '-trixie') {
+    no warnings 'redefine';
+    my (@commands, $date);
+    local *main::run = sub { push @commands, [@_] };
+    local *main::capture = sub {
+        return '{"token":"test-token"}' if $_[1] eq '-fsS';
+        my ($found_date, $suffix) = $_[-1] =~ /nightly-(\d{8})(-trixie)?$/;
+        $date = $found_date;
+        return ($suffix // '') eq $existing_suffix ? '200' : '404';
+    };
+    publish('ghcr.io/test/moonbit', 'nightly', 0, 'digests', {}, $bases->[0]);
+    my $missing_suffix = $existing_suffix eq '' ? '-trixie' : '';
+    is_deeply($commands[0], ['docker', 'buildx', 'imagetools', 'create',
+        '-t', "ghcr.io/test/moonbit:nightly-$date$missing_suffix",
+        "ghcr.io/test/moonbit:nightly-$date$existing_suffix"],
+        'missing dated alias copies the existing index');
+    is_deeply($commands[1], ['docker', 'buildx', 'imagetools', 'create',
+        '-t', 'ghcr.io/test/moonbit:nightly', '-t', 'ghcr.io/test/moonbit:nightly-trixie',
+        (map { "ghcr.io/test/moonbit\@$digests{trixie}{$_}" } qw(amd64 arm64))],
+        'only mutable nightly aliases receive the new build');
+}
+
+# Invalid aliases must fail before any publication can start.
+for my $aliases (['-bookworm'], ['-trixie', '-trixie'], ['bad suffix'], 'not-an-array') {
+    write_json('bases.json', [{%{$bases->[0]}, aliases => $aliases}, $bases->[1]]);
+    eval { read_bases() };
+    like($@, qr/Duplicate tag suffix|Invalid tag suffix|Expected alias array/, 'invalid alias configuration rejected');
+}
+write_json('bases.json', $bases);
 
 # One base's incomplete architecture set does not prevent another publication.
 unlink 'digests/trixie/arm64.digest' or die $!;

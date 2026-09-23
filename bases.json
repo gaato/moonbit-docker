@@ -1,5 +1,5 @@
 [
-  {"name": "trixie", "image": "debian:trixie-slim", "suffix": ""},
+  {"name": "trixie", "image": "debian:trixie-slim", "suffix": "", "aliases": ["-trixie"]},
   {"name": "bookworm", "image": "debian:bookworm-slim", "suffix": "-bookworm"},
   {"name": "bci16.0", "image": "registry.suse.com/bci/bci-base:16.0", "suffix": "-bci16.0"},
   {"name": "tumbleweed", "image": "registry.opensuse.org/opensuse/tumbleweed:latest", "suffix": "-tumbleweed"},

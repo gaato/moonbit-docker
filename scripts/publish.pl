@@ -50,7 +50,12 @@ sub read_bases {
             && ($base->{name} // '') =~ /\A[a-z0-9][a-z0-9.-]*\z/
             && ($base->{image} // '') =~ /\A[a-z0-9][a-z0-9.:\/-]*\z/
             && defined $base->{suffix} && $base->{suffix} =~ /\A(?:-[a-z0-9][a-z0-9.-]*)?\z/;
-        die "Duplicate base name or suffix\n" if $names{$base->{name}}++ || $suffixes{$base->{suffix}}++;
+        die "Duplicate base name\n" if $names{$base->{name}}++;
+        die "Expected alias array\n" if exists $base->{aliases} && ref $base->{aliases} ne 'ARRAY';
+        for my $suffix ($base->{suffix}, @{$base->{aliases} // []}) {
+            die "Invalid tag suffix\n" unless defined $suffix && $suffix =~ /\A(?:-[a-z0-9][a-z0-9.-]*)?\z/;
+            die "Duplicate tag suffix\n" if $suffixes{$suffix}++;
+        }
     }
     return $bases;
 }
@@ -126,23 +131,37 @@ sub dated_tag_exists {
 sub publish {
     my ($image, $version, $latest, $digest_dir, $history, $base) = @_;
     my $nightly = $version eq 'nightly';
-    my $suffix = $base->{suffix};
+    my @suffixes = ($base->{suffix}, @{$base->{aliases} // []});
     my @sources = sources($image, "$digest_dir/$base->{name}");
     my (@tags, @inspect);
     if ($nightly) {
         my $repository = $image;
         $repository =~ s{\Aghcr\.io/}{} or die "Expected a ghcr.io image\n";
         # Date each base at publication time; independent builds may span midnight.
-        my $dated = 'nightly-' . strftime('%Y%m%d', gmtime) . $suffix;
-        @tags = ("nightly$suffix");
-        if (dated_tag_exists($repository, $dated, registry_token($repository))) {
-            print "$dated already exists; preserving it\n";
-        } else {
-            push @tags, $dated;
+        my $date = 'nightly-' . strftime('%Y%m%d', gmtime);
+        my @dated = map { "$date$_" } @suffixes;
+        my $token = registry_token($repository);
+        my (@existing, @missing);
+        for my $tag (@dated) {
+            if (dated_tag_exists($repository, $tag, $token)) { push @existing, $tag; }
+            else { push @missing, $tag; }
         }
-        @inspect = ("nightly$suffix", $dated);
+        @tags = map { "nightly$_" } @suffixes;
+        if (@existing) {
+            # A newly introduced alias or a partial publish must reuse the day's
+            # original index, not today's rebuilt image. A single index source
+            # is copied unchanged by imagetools create.
+            run('docker', 'buildx', 'imagetools', 'create',
+                (map { ('-t', "$image:$_") } @missing), "$image:$existing[0]") if @missing;
+        } else {
+            push @tags, @missing;
+        }
+        @inspect = ((map { "nightly$_" } @suffixes), @dated);
     } else {
-        @tags = map { "$_$suffix" } release_tags($version, $latest, $history->{$base->{name}} // []);
+        @tags = map {
+            my $tag = $_;
+            map { "$tag$_" } @suffixes;
+        } release_tags($version, $latest, $history->{$base->{name}} // []);
         @inspect = @tags;
     }
     run('docker', 'buildx', 'imagetools', 'create',
