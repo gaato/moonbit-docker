@@ -1,5 +1,5 @@
 # escape=`
-FROM mcr.microsoft.com/dotnet/framework/runtime:4.8-windowsservercore-ltsc2022
+FROM mcr.microsoft.com/dotnet/framework/runtime:4.8.1-windowsservercore-ltsc2025
 
 SHELL ["cmd", "/S", "/C"]
 RUN curl -fSL -o C:\vs_buildtools.exe https://aka.ms/vs/17/release/vs_buildtools.exe `
