@@ -1,0 +1,26 @@
+name: Probe MoonBit on Windows Server Core
+
+on:
+  push:
+    branches: [experiment/windows-servercore]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Confirm Windows container engine
+        shell: pwsh
+        run: |
+          if ((docker info --format '{{.OSType}}') -ne 'windows') { throw 'Windows container engine is unavailable' }
+          Get-PSDrive C
+      - name: Build local probe image
+        shell: pwsh
+        run: docker build --pull --memory 2GB -f experiments/windows/Dockerfile -t moonbit-windows-probe .
+      - name: Smoke test native build in container
+        shell: pwsh
+        run: docker run --rm moonbit-windows-probe cmd /S /C C:\smoke.cmd
