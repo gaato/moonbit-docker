@@ -16,7 +16,16 @@ jobs:
       - name: Confirm Windows container engine
         shell: pwsh
         run: |
-          if ((docker info --format '{{.OSType}}') -ne 'windows') { throw 'Windows container engine is unavailable' }
+          $engine = docker info --format '{{.OSType}}' 2>$null
+          if ($engine -ne 'windows') {
+            Restart-Service docker
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 2
+              $engine = docker info --format '{{.OSType}}' 2>$null
+              if ($engine -eq 'windows') { break }
+            }
+          }
+          if ($engine -ne 'windows') { throw 'Windows container engine is unavailable' }
           Get-PSDrive C
       - name: Build local probe image
         shell: pwsh
