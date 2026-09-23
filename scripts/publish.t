@@ -38,7 +38,7 @@ my $serial = 0;
 for my $base (@$bases) {
     my $name = $base->{name};
     mkdir "digests/$name" or die $!;
-    for my $arch ('amd64', 'arm64') {
+    for my $arch (@{$base->{architectures}}) {
         my $digest = sprintf 'sha256:%064x', ++$serial;
         $digests{$name}{$arch} = $digest;
         open my $file, '>', "digests/$name/$arch.digest" or die $!;
@@ -62,7 +62,7 @@ for my $base (@$bases) {
     my @release_tags = map { my $tag = $_; map { "$tag$_" } @suffixes } @tags;
     is_deeply($commands[0], ['docker', 'buildx', 'imagetools', 'create',
         (map { ('-t', "ghcr.io/test/moonbit:$_") } @release_tags),
-        (map { "ghcr.io/test/moonbit\@$digests{$base->{name}}{$_}" } qw(amd64 arm64))],
+        (map { "ghcr.io/test/moonbit\@$digests{$base->{name}}{$_}" } @{$base->{architectures}})],
         "$base->{name}: isolated tags, history, and sources");
 
     for my $status (200, 404, 503) {
@@ -89,7 +89,7 @@ for my $base (@$bases) {
             my @expected = ('docker', 'buildx', 'imagetools', 'create',
                 (map { ('-t', "ghcr.io/test/moonbit:nightly$_") } @suffixes));
             push @expected, map { ('-t', $_) } @dated if $status == 404;
-            push @expected, map { "ghcr.io/test/moonbit\@$digests{$base->{name}}{$_}" } qw(amd64 arm64);
+            push @expected, map { "ghcr.io/test/moonbit\@$digests{$base->{name}}{$_}" } @{$base->{architectures}};
             is_deeply($commands[0], \@expected, 'dated tag is created only when absent');
             is($commands[-1][-1], $dated[-1], 'dated tag inspected even if preserved');
         }
@@ -141,6 +141,20 @@ for my $aliases (['-bookworm'], ['-trixie', '-trixie'], ['bad suffix'], 'not-an-
 }
 write_json('bases.json', $bases);
 
+for my $invalid (
+    {%{$bases->[2]}, os => 'unknown'},
+    {%{$bases->[2]}, architectures => ['amd64', 'arm64']},
+) {
+    write_json('bases.json', [$bases->[0], $bases->[1], $invalid]);
+    eval { read_bases() };
+    like($@, qr/Invalid base platform/, 'invalid OS or architecture set rejected');
+}
+write_json('bases.json', $bases);
+write_json('bases.json', [$bases->[0], $bases->[1], {%{$bases->[3]}, runner => 'windows-2022-invalid'}]);
+eval { read_bases() };
+like($@, qr/Invalid base runner/, 'invalid Windows runner rejected');
+write_json('bases.json', $bases);
+
 # One base's incomplete architecture set does not prevent another publication.
 unlink 'digests/trixie/arm64.digest' or die $!;
 {
@@ -152,6 +166,16 @@ unlink 'digests/trixie/arm64.digest' or die $!;
     is(scalar @commands, 0, 'failed base publishes nothing');
     publish('ghcr.io/test/moonbit', $version, 0, 'digests', {}, $bases->[1]);
     ok(@commands, 'another base can still publish');
+}
+
+for my $base (@$bases[2, 3]) {
+    unlink "digests/$base->{name}/amd64.digest" or die $!;
+    no warnings 'redefine';
+    my @commands;
+    local *main::run = sub { push @commands, [@_] };
+    eval { publish('ghcr.io/test/moonbit', $version, 0, 'digests', {}, $base) };
+    like($@, qr/Missing amd64/, "$base->{name}: missing digest blocks publication");
+    is(scalar @commands, 0, "$base->{name}: failed build publishes no tags");
 }
 
 # Publisher never commits history; receipts follow successful publication only.
@@ -185,12 +209,12 @@ is_deeply(select_bases($bases, \%complete, $version, 'all', 0), [], 'all publish
 eval { select_bases($bases, {}, $version, 'unknown-base', 0) };
 like($@, qr/Unknown base/, 'unknown base rejected');
 
-write_json('receipts/tumbleweed.json', {base => 'tumbleweed', version => '0.10.9+aaa'});
+write_json('receipts/trixie.json', {base => 'trixie', version => '0.10.9+aaa'});
 my $untouched = {};
 eval { merge_receipts($untouched, 'receipts', $version, $bases) };
 like($@, qr/Invalid publication receipt/, 'wrong-version receipt rejected');
 is_deeply($untouched, {}, 'invalid receipts do not partially alter history');
-unlink 'receipts/tumbleweed.json' or die $!;
+unlink 'receipts/trixie.json' or die $!;
 write_json('receipts/unknown.json', {base => 'unknown', version => $version});
 eval { merge_receipts({}, 'receipts', $version, $bases) };
 like($@, qr/Invalid publication receipt/, 'unknown-base receipt rejected');

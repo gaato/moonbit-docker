@@ -50,5 +50,7 @@ jobs:
     with:
       base: ${{ matrix.name }}
       image: ${{ matrix.image }}
+      os: ${{ matrix.os }}
+      runner: ${{ matrix.runner }}
       version: ${{ needs.check.outputs.version }}
       latest: ${{ needs.check.outputs.latest == 'true' }}

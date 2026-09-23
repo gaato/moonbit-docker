@@ -1,26 +1,6 @@
 {
-   "bci16.0" : [
-      "0.10.14+7d59c7ec9"
-   ],
-   "bookworm" : [
-      "0.10.14+7d59c7ec9"
-   ],
-   "trixie" : [
-      "0.10.14+7d59c7ec9"
-   ],
-   "tumbleweed" : [
-      "0.10.14+7d59c7ec9"
-   ],
-   "ubi10" : [
-      "0.10.14+7d59c7ec9"
-   ],
-   "ubi9" : [
-      "0.10.14+7d59c7ec9"
-   ],
-   "ubuntu24.04" : [
-      "0.10.14+7d59c7ec9"
-   ],
-   "ubuntu26.04" : [
-      "0.10.14+7d59c7ec9"
-   ]
+  "trixie": ["0.10.14+7d59c7ec9"],
+  "bookworm": ["0.10.14+7d59c7ec9"],
+  "windowsservercore-ltsc2022": [],
+  "windowsservercore-ltsc2025": []
 }

@@ -51,6 +51,14 @@ sub read_bases {
             && ($base->{image} // '') =~ /\A[a-z0-9][a-z0-9.:\/-]*\z/
             && defined $base->{suffix} && $base->{suffix} =~ /\A(?:-[a-z0-9][a-z0-9.-]*)?\z/;
         die "Duplicate base name\n" if $names{$base->{name}}++;
+        die "Invalid base platform\n" unless ($base->{os} // '') =~ /\A(?:linux|windows)\z/
+            && ref $base->{architectures} eq 'ARRAY'
+            && join(',', @{$base->{architectures}}) eq
+                ($base->{os} eq 'windows' ? 'amd64' : 'amd64,arm64');
+        my $runner_valid = $base->{os} eq 'windows'
+            ? ($base->{runner} // '') =~ /\Awindows-(?:2022|2025)\z/
+            : !exists $base->{runner};
+        die "Invalid base runner\n" unless $runner_valid;
         die "Expected alias array\n" if exists $base->{aliases} && ref $base->{aliases} ne 'ARRAY';
         for my $suffix ($base->{suffix}, @{$base->{aliases} // []}) {
             die "Invalid tag suffix\n" unless defined $suffix && $suffix =~ /\A(?:-[a-z0-9][a-z0-9.-]*)?\z/;
@@ -88,9 +96,9 @@ sub release_tags {
 }
 
 sub sources {
-    my ($image, $directory) = @_;
+    my ($image, $directory, $architectures) = @_;
     my @sources;
-    for my $arch ('amd64', 'arm64') {
+    for my $arch (@$architectures) {
         my $path = "$directory/$arch.digest";
         open my $file, '<', $path or die "Missing $arch digest: $!\n";
         my $digest = do { local $/; <$file> } // '';
@@ -99,7 +107,7 @@ sub sources {
         die "Invalid $arch digest\n" unless $digest =~ /\Asha256:[0-9a-f]{64}\z/;
         push @sources, "$image\@$digest";
     }
-    die "Architecture digests must differ\n" if $sources[0] eq $sources[1];
+    die "Architecture digests must differ\n" if @sources == 2 && $sources[0] eq $sources[1];
     return @sources;
 }
 
@@ -132,7 +140,7 @@ sub publish {
     my ($image, $version, $latest, $digest_dir, $history, $base) = @_;
     my $nightly = $version eq 'nightly';
     my @suffixes = ($base->{suffix}, @{$base->{aliases} // []});
-    my @sources = sources($image, "$digest_dir/$base->{name}");
+    my @sources = sources($image, "$digest_dir/$base->{name}", $base->{architectures});
     my (@tags, @inspect);
     if ($nightly) {
         my $repository = $image;

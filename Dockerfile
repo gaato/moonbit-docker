@@ -12,24 +12,10 @@ ENV PATH="${MOON_HOME}/bin:${PATH}"
 
 # gcc and libc development headers are for the native backend.
 RUN set -eux; \
-    if command -v apt-get >/dev/null 2>&1; then \
-        apt-get update; \
-        apt-get install -y --no-install-recommends \
-            bash ca-certificates curl git gcc libc6-dev tar gzip; \
-        rm -rf /var/lib/apt/lists/*; \
-    elif command -v zypper >/dev/null 2>&1; then \
-        zypper --non-interactive refresh; \
-        zypper --non-interactive install --no-recommends \
-            bash ca-certificates curl git gcc glibc-devel tar gzip; \
-        zypper --non-interactive clean --all; \
-    elif command -v microdnf >/dev/null 2>&1; then \
-        microdnf --assumeyes --setopt=install_weak_deps=0 install \
-            bash ca-certificates curl-minimal git-core gcc glibc-devel tar gzip; \
-        microdnf clean all; \
-    else \
-        echo 'Unsupported base image: apt-get, zypper or microdnf is required' >&2; \
-        exit 1; \
-    fi
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        bash ca-certificates curl git gcc libc6-dev tar gzip; \
+    rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
     curl -fsSL https://cli.moonbitlang.com/install/unix.sh \

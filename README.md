@@ -7,7 +7,8 @@
 [![License](https://img.shields.io/github/license/gaato/moonbit-docker)](LICENSE.md)
 
 Unofficial [MoonBit](https://www.moonbitlang.com/) toolchain images for
-`linux/amd64` and `linux/arm64`, with release and nightly tags.
+`linux/amd64`, `linux/arm64`, and Windows Server Core `windows/amd64`,
+with release and nightly tags.
 
 This project is not affiliated with the MoonBit team. The images contain the
 upstream binaries as installed by the official install script; see
@@ -57,22 +58,24 @@ jobs:
 
 Tags without a suffix use Debian trixie and point to the same images as
 `-trixie` tags. Append a suffix to any tag to
-choose another base, for example `0.10-bookworm` or `nightly-tumbleweed`.
+choose another base, for example `0.10-bookworm` or
+`0.10-windowsservercore-ltsc2025`.
 
 | Tag suffix | Base image |
 |---|---|
 | none or `-trixie` | `debian:trixie-slim` |
 | `-bookworm` | `debian:bookworm-slim` |
-| `-bci16.0` | `registry.suse.com/bci/bci-base:16.0` |
-| `-tumbleweed` | `registry.opensuse.org/opensuse/tumbleweed:latest` |
-| `-ubuntu24.04` | `ubuntu:24.04` |
-| `-ubuntu26.04` | `ubuntu:26.04` |
-| `-ubi9` | `registry.access.redhat.com/ubi9/ubi-minimal:latest` |
-| `-ubi10` | `registry.access.redhat.com/ubi10/ubi-minimal:latest` |
+| `-windowsservercore-ltsc2022` | `mcr.microsoft.com/dotnet/framework/runtime:4.8-windowsservercore-ltsc2022` |
+| `-windowsservercore-ltsc2025` | `mcr.microsoft.com/dotnet/framework/runtime:4.8.1-windowsservercore-ltsc2025` |
 
-All variants contain the upstream MoonBit toolchain in `/opt/moon`, plus
+The Debian variants contain the upstream MoonBit toolchain in `/opt/moon`, plus
 `git`, `curl`, `gcc`, and libc development headers. The toolchain directory
 is writable by any UID, allowing use with `--user` or `--userns=keep-id`.
+
+The Windows variants contain the upstream Windows toolchain in `C:\moon` and
+Visual Studio Build Tools for native builds. They run on Windows hosts with
+Windows containers enabled. Before a native build in a shell, initialize the
+MSVC environment with `C:\BuildTools\Common7\Tools\VsDevCmd.bat -arch=amd64`.
 
 ## Tags
 
@@ -91,15 +94,16 @@ pin an exact image.
 
 ## Updates
 
-Each base is published once both `linux/amd64` and `linux/arm64` pass smoke
-tests. Bases publish independently, so a failed build can leave one base
-on an older version. See [`versions.json`](versions.json) for published
-releases by base.
+Each Debian base is published once both `linux/amd64` and `linux/arm64` pass
+smoke tests. Each Windows Server Core base is published after its
+`windows/amd64` test passes. Bases publish independently, so a failed build
+can leave one base on an older version. See [`versions.json`](versions.json)
+for published releases by base. Existing tags for removed Linux bases remain
+in the registry but are no longer updated.
 
 Daily workflows check for new releases and rebuild nightly images. Release
-images do not receive automatic base image updates, including the
-Tumbleweed variant. Older releases and dated nightlies are not backfilled
-when a base is added.
+images do not receive automatic base image updates. Older releases and dated
+nightlies are not backfilled when a base is added.
 
 ## Maintenance
 
