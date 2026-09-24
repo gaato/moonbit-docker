@@ -33,14 +33,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Test publication logic
-        run: prove scripts/*.t
+        run: python3 -m unittest discover -s scripts
       - name: Select bases
         id: prepare
         env:
           CHANNEL: release
           INPUT_BASE: ${{ inputs.base }}
           INPUT_VERSION: ${{ inputs.version }}
-        run: perl scripts/release.pl prepare
+        run: python3 scripts/release.py prepare
 
   build:
     needs: check
@@ -77,4 +77,4 @@ jobs:
           VERSION: ${{ needs.check.outputs.version }}
           TARGETS: ${{ needs.check.outputs.matrix }}
           RECEIPT_DIR: ${{ runner.temp }}/receipts
-        run: perl scripts/release.pl record
+        run: python3 scripts/release.py record
