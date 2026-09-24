@@ -18,6 +18,17 @@
         "\"image\":\\s*\"(?<depName>[^\":]+):(?<currentValue>[^\"]+)\""
       ],
       "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Runner labels that the github-actions manager misses: matrix values and expressions",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "(?:runner: |')(?<depName>ubuntu)-(?<currentValue>\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "github-runners"
     }
   ],
   "packageRules": [
@@ -30,6 +41,13 @@
         "node"
       ],
       "groupName": "node base images"
+    },
+    {
+      "description": "Move every runner label in one pull request",
+      "matchDatasources": [
+        "github-runners"
+      ],
+      "groupName": "GitHub runners"
     }
   ]
 }
