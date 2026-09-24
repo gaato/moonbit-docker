@@ -1,0 +1,35 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "timezone": "Asia/Tokyo",
+  "schedule": [
+    "before 9am on monday"
+  ],
+  "customManagers": [
+    {
+      "description": "Base images used by the build workflows",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^bases\\.json$/"
+      ],
+      "matchStrings": [
+        "\"image\":\\s*\"(?<depName>[^\":]+):(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Keep the Dockerfile default and every base on the same Node major",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "node"
+      ],
+      "groupName": "node base images"
+    }
+  ]
+}
