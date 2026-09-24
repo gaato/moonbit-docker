@@ -29,9 +29,9 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-26.04
           - arch: arm64
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-26.04-arm
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -85,7 +85,7 @@ jobs:
   publish:
     # Only this base's required architecture jobs gate its publication.
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: write
@@ -109,7 +109,7 @@ jobs:
           LATEST: ${{ inputs.latest }}
           DIGEST_DIR: ${{ runner.temp }}/digests
           RECEIPT_DIR: ${{ runner.temp }}/receipts
-        run: perl scripts/publish.pl
+        run: python3 scripts/publish.py
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: inputs.version != 'nightly'
         with:

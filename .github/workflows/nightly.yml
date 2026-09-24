@@ -18,7 +18,7 @@ permissions: {}
 
 jobs:
   check:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     outputs:
@@ -29,13 +29,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Test publication logic
-        run: prove scripts/*.t
+        run: python3 -m unittest discover -s scripts
       - name: Select bases
         id: prepare
         env:
           CHANNEL: nightly
           INPUT_BASE: ${{ inputs.base }}
-        run: perl scripts/release.pl prepare
+        run: python3 scripts/release.py prepare
 
   build:
     needs: check

@@ -15,15 +15,21 @@ permissions: {}
 
 jobs:
   check:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     outputs:
       bases: ${{ steps.bases.outputs.bases }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Lint and type check
+        run: |
+          uv run --locked ruff check
+          uv run --locked ruff format --check
+          uv run --locked ty check
       - name: Test publication logic
-        run: prove scripts/*.t
+        run: python3 -m unittest discover -s scripts
       - name: List bases
         id: bases
         run: echo "bases=$(jq -c 'map({name, image})' bases.json)" >> "$GITHUB_OUTPUT"
@@ -37,7 +43,7 @@ jobs:
         base: ${{ fromJSON(needs.check.outputs.bases) }}
         arch: [amd64, arm64]
     name: build (${{ matrix.base.name }}, ${{ matrix.arch }})
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
     permissions:
       contents: read
     steps:

@@ -118,7 +118,13 @@ without publishing.
 Run the publication tests locally:
 
 ```fish
-prove scripts/*.t
+python3 -m unittest discover -s scripts
+```
+
+Lint and type check them with [uv](https://docs.astral.sh/uv/):
+
+```fish
+uv run ruff check; and uv run ruff format --check; and uv run ty check
 ```
 
 ## License
