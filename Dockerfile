@@ -1,4 +1,8 @@
-ARG BASE_IMAGE=debian:trixie-slim
+# The official Node.js images are Debian based and carry the node binary the
+# js backend shells out to; without it `moon run` and `moon test` fail on
+# that target. The Debian release still determines the glibc the native
+# backend links against.
+ARG BASE_IMAGE=node:24-trixie-slim
 FROM ${BASE_IMAGE}
 
 # Exact upstream version such as "0.10.14+7d59c7ec9", "latest", or "nightly".
@@ -27,5 +31,8 @@ RUN set -eux; \
     chmod -R a+rwX "${MOON_HOME}"; \
     moon version --all
 
+# The base image wraps every command in a script that prepends `node` when
+# the first argument starts with a dash, which would swallow `moon --help`.
+ENTRYPOINT []
 WORKDIR /work
 CMD ["bash"]

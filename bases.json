@@ -1,4 +1,4 @@
 [
-  {"name": "trixie", "image": "debian:trixie-slim", "suffix": "", "aliases": ["-trixie"], "architectures": ["amd64", "arm64"]},
-  {"name": "bookworm", "image": "debian:bookworm-slim", "suffix": "-bookworm", "architectures": ["amd64", "arm64"]}
+  {"name": "trixie", "image": "node:24-trixie-slim", "suffix": "", "aliases": ["-trixie"], "architectures": ["amd64", "arm64"]},
+  {"name": "bookworm", "image": "node:24-bookworm-slim", "suffix": "-bookworm", "architectures": ["amd64", "arm64"]}
 ]

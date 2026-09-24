@@ -19,5 +19,9 @@ engine=${ENGINE:-$(command -v podman || command -v docker)}
   moon run --target native cmd/main
   moon build --target native --release
   moon build --target js --release
+  # Running the js output spawns node, so this is what proves the base
+  # image still supplies it. moon test --target js would not: the template
+  # has no tests, so it exits before reaching node.
+  moon run --target js cmd/main
   moon build --target wasm --release
 '
