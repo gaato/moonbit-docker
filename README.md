@@ -111,6 +111,10 @@ The Build workflow accepts an upstream `version` such as
 builds the current release for bases that have not published it yet.
 The nightly workflow also accepts `base`.
 
+Pull requests run the CI workflow, which builds every base for both
+architectures from the current upstream release and runs the smoke test
+without publishing.
+
 Run the publication tests locally:
 
 ```fish
