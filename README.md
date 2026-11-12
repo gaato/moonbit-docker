@@ -3,7 +3,7 @@
 [![ghcr.io](https://img.shields.io/badge/ghcr.io-gaato%2Fmoonbit-blue?logo=docker&logoColor=white)](https://github.com/gaato/moonbit-docker/pkgs/container/moonbit)
 [![Build](https://github.com/gaato/moonbit-docker/actions/workflows/build.yml/badge.svg)](https://github.com/gaato/moonbit-docker/actions/workflows/build.yml)
 [![Build nightly](https://github.com/gaato/moonbit-docker/actions/workflows/nightly.yml/badge.svg)](https://github.com/gaato/moonbit-docker/actions/workflows/nightly.yml)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/gaato/moonbit-docker)
+[![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-blue)](https://deepwiki.com/gaato/moonbit-docker)
 [![License](https://img.shields.io/github/license/gaato/moonbit-docker)](LICENSE.md)
 
 Unofficial [MoonBit](https://www.moonbitlang.com/) toolchain images for
