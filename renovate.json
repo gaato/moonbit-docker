@@ -20,6 +20,17 @@
       "datasourceTemplate": "docker"
     },
     {
+      "description": "Base images named in the README, so they move in the same pull request as bases.json",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^README\\.md$/"
+      ],
+      "matchStrings": [
+        "`(?<depName>node):(?<currentValue>[^`]+)`"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
       "description": "Runner labels that the github-actions manager misses: matrix values and expressions",
       "customType": "regex",
       "managerFilePatterns": [
