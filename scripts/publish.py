@@ -133,8 +133,13 @@ def read_versions(path: str) -> History:
     return cast(History, history)
 
 
-def release_tags(version: str, latest: bool, history: Iterable[str]) -> list[str]:
+def exact_tag(version: str) -> str:
     major, minor, patch, commit = parse_version(version)
+    return f"{major}.{minor}.{patch}-{commit}"
+
+
+def release_tags(version: str, latest: bool, history: Iterable[str]) -> list[str]:
+    major, minor, patch, _ = parse_version(version)
     # Rebuilding an older patch must not move the minor tag backward.
     # Rebuilding the newest patch may refresh it with a new base image.
     newest = True
@@ -142,7 +147,7 @@ def release_tags(version: str, latest: bool, history: Iterable[str]) -> list[str
         a, b, c, _ = parse_version(published)
         if a == major and b == minor and c > patch:
             newest = False
-    tags = [f"{major}.{minor}.{patch}", f"{major}.{minor}.{patch}-{commit}"]
+    tags = [f"{major}.{minor}.{patch}", exact_tag(version)]
     if newest:
         tags.append(f"{major}.{minor}")
     if latest:

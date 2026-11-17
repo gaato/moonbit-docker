@@ -19,6 +19,7 @@ with contextlib.chdir(REPO):
     STORED_HISTORY = publish.read_versions("versions.json")
 IMAGE = "ghcr.io/test/moonbit"
 VERSION = "0.10.10+bbb"
+README = "```dockerfile\nFROM ghcr.io/gaato/moonbit:0.10.9-aaa AS build\n```\n"
 
 
 def tag_args(tags: Iterable[str]) -> list[str]:
@@ -28,6 +29,23 @@ def tag_args(tags: Iterable[str]) -> list[str]:
 class RepositoryTest(unittest.TestCase):
     def test_history_covers_configured_bases(self) -> None:
         self.assertEqual(sorted(STORED_HISTORY), sorted(base["name"] for base in BASES))
+
+    def test_example_names_a_complete_release(self) -> None:
+        # record() rewrites this line, so a hand edit must keep it matchable.
+        lines = [
+            match[0]
+            for match in release.EXAMPLE_PATTERN.finditer(
+                (REPO / "README.md").read_text()
+            )
+        ]
+        self.assertEqual(len(lines), 1, "one multi-stage example")
+        tag = lines[0].split()[1].removeprefix("ghcr.io/gaato/moonbit:")
+        complete = set.intersection(*(set(v) for v in STORED_HISTORY.values()))
+        self.assertIn(
+            tag,
+            {publish.exact_tag(version) for version in complete},
+            "example pins an exact tag published on every base",
+        )
 
 
 class ReleaseTagsTest(unittest.TestCase):
@@ -344,6 +362,20 @@ class ReleaseTest(WorkspaceTest):
         publish.write_json(
             "receipts/bookworm.json", {"base": "bookworm", "version": VERSION}
         )
+        Path("README.md").write_text(README)
+
+    def record_env(self, latest: bool) -> None:
+        self.enterContext(
+            mock.patch.dict(
+                os.environ,
+                {
+                    "VERSION": VERSION,
+                    "LATEST": "true" if latest else "false",
+                    "RECEIPT_DIR": "receipts",
+                    "TARGETS": json.dumps({"include": BASES}),
+                },
+            )
+        )
 
     def test_merge_receipts(self) -> None:
         merged = {}
@@ -415,16 +447,7 @@ class ReleaseTest(WorkspaceTest):
             release.select_bases(BASES, {}, VERSION, "unknown-base", False)
 
     def test_record(self) -> None:
-        self.enterContext(
-            mock.patch.dict(
-                os.environ,
-                {
-                    "VERSION": VERSION,
-                    "RECEIPT_DIR": "receipts",
-                    "TARGETS": json.dumps({"include": BASES}),
-                },
-            )
-        )
+        self.record_env(latest=True)
         commands = self.record_commands()
         release.record()
         self.assertEqual(
@@ -450,6 +473,46 @@ class ReleaseTest(WorkspaceTest):
             mock.patch.object(publish, "run", fail_push),
             self.assertRaisesRegex(Fail, "push failed"),
         ):
+            release.record()
+
+    def test_record_moves_example_once_every_base_has_latest(self) -> None:
+        self.record_env(latest=True)
+        commands = self.record_commands()
+        release.record()
+        self.assertEqual(
+            Path("README.md").read_text(), README, "partial release keeps example"
+        )
+        publish.write_json(
+            "receipts/trixie.json", {"base": "trixie", "version": VERSION}
+        )
+        release.record()
+        self.assertEqual(
+            Path("README.md").read_text(),
+            README.replace("0.10.9-aaa", "0.10.10-bbb"),
+            "complete release moves example to its exact tag",
+        )
+        self.assertIn(
+            ["git", "add", "versions.json", "README.md"],
+            commands,
+            "example change is committed with the history",
+        )
+
+    def test_record_keeps_example_for_older_release(self) -> None:
+        for name in ("bookworm", "trixie"):
+            publish.write_json(
+                f"receipts/{name}.json", {"base": name, "version": VERSION}
+            )
+        self.record_env(latest=False)
+        self.record_commands()
+        release.record()
+        self.assertEqual(Path("README.md").read_text(), README)
+
+    def test_record_rejects_missing_example(self) -> None:
+        publish.write_json("versions.json", {base["name"]: [VERSION] for base in BASES})
+        Path("README.md").write_text("FROM ghcr.io/gaato/moonbit:0.10 AS build\n" * 2)
+        self.record_env(latest=True)
+        self.record_commands()
+        with self.assertRaisesRegex(Fail, "found 2"):
             release.record()
 
     def test_prepare(self) -> None:

@@ -75,6 +75,7 @@ jobs:
       - name: Record successful bases
         env:
           VERSION: ${{ needs.check.outputs.version }}
+          LATEST: ${{ needs.check.outputs.latest }}
           TARGETS: ${{ needs.check.outputs.matrix }}
           RECEIPT_DIR: ${{ runner.temp }}/receipts
         run: python3 scripts/release.py record

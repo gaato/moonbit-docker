@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import sys
 from collections.abc import Iterable, Mapping, Sequence
 
 import publish as p
 from publish import Base, Fail, History, Target
+
+EXAMPLE_PATTERN = re.compile(
+    r"^(FROM ghcr\.io/gaato/moonbit:)\S+( AS build)$", re.MULTILINE
+)
 
 
 def select_bases(
@@ -126,13 +131,39 @@ def read_targets(known: Iterable[str]) -> list[Target]:
     return targets
 
 
+def update_example(path: str, version: str) -> bool:
+    try:
+        with open(path) as file:
+            text = file.read()
+    except OSError as error:
+        raise Fail(f"Cannot read {path}: {error.strerror}") from error
+    updated, count = EXAMPLE_PATTERN.subn(rf"\g<1>{p.exact_tag(version)}\g<2>", text)
+    if count != 1:
+        raise Fail(f"Expected one multi-stage example in {path}, found {count}")
+    if updated == text:
+        return False
+    with open(f"{path}.tmp", "w") as file:
+        file.write(updated)
+    os.replace(f"{path}.tmp", path)
+    return True
+
+
 def record() -> None:
     version = p.env("VERSION")
+    latest = p.env("LATEST") == "true"
     directory = p.env("RECEIPT_DIR")
-    targets = read_targets(base["name"] for base in p.read_bases())
+    names = [base["name"] for base in p.read_bases()]
+    targets = read_targets(names)
     p.run("git", "pull", "--ff-only")
     history = p.read_versions("versions.json")
-    if not merge_receipts(history, directory, version, targets):
+    recorded = merge_receipts(history, directory, version, targets)
+    # Upstream breaks compatibility even in patch releases and has reissued a
+    # patch under a new build hash, so the example pins the exact tag. It moves
+    # only once every base has the current release, so that copying it with any
+    # base suffix works.
+    complete = latest and all(version in history.get(name, []) for name in names)
+    example = complete and update_example("README.md", version)
+    if not (recorded or example):
         print("No new successful publications to record")
         return
     p.write_json("versions.json", history)
@@ -143,7 +174,7 @@ def record() -> None:
         "user.email",
         "41898282+github-actions[bot]@users.noreply.github.com",
     )
-    p.run("git", "add", "versions.json")
+    p.run("git", "add", "versions.json", "README.md")
     p.run("git", "commit", "-m", f"Record published bases for {version}")
     # Registry publication has already happened. If this push fails, the next
     # automatic run may rebuild bases whose success was not recorded.

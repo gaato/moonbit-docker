@@ -27,7 +27,7 @@ to stay on a release series.
 ### Multi-stage builds
 
 ```dockerfile
-FROM ghcr.io/gaato/moonbit:0.10.14 AS build
+FROM ghcr.io/gaato/moonbit:0.10.21-06da1ed44 AS build
 COPY . .
 RUN moon build --target native --release
 
@@ -89,7 +89,11 @@ release tag, the same as the rest of the base.
 | `0.10.14-7d59c7ec9` | Exact upstream version `0.10.14+7d59c7ec9` |
 
 Minor tags stay within their series: `0.10` does not move to `0.11`.
-Dated nightly tags are preserved after publication. Use an image digest to
+Dated nightly tags are preserved after publication.
+
+Upstream makes breaking changes in patch releases too, and has reissued a
+patch version under a new build hash, which moves a tag such as `0.10.19`.
+Use a tag with the build hash to pin the toolchain, or an image digest to
 pin an exact image.
 
 ## Updates
@@ -110,6 +114,10 @@ The Build workflow accepts an upstream `version` such as
 (the default). Specifying a version forces a rebuild; leaving it empty
 builds the current release for bases that have not published it yet.
 The nightly workflow also accepts `base`.
+
+When the latest release has been published on every base, the Build
+workflow also moves the multi-stage example above to its exact tag, so
+copied builds start from the current toolchain.
 
 Pull requests run the CI workflow, which builds every base for both
 architectures from the current upstream release and runs the smoke test
