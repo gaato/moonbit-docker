@@ -27,7 +27,7 @@ to stay on a release series.
 ### Multi-stage builds
 
 ```dockerfile
-FROM ghcr.io/gaato/moonbit:0.10.21-06da1ed44 AS build
+FROM ghcr.io/gaato/moonbit:0.10.22-124d61d05 AS build
 COPY . .
 RUN moon build --target native --release
 
