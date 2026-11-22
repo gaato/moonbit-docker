@@ -61,8 +61,8 @@ Tags without a suffix use Debian trixie and point to the same images as
 
 | Tag suffix | Base image |
 |---|---|
-| none or `-trixie` | `node:24-trixie-slim` |
-| `-bookworm` | `node:24-bookworm-slim` |
+| none or `-trixie` | `node:26-trixie-slim` |
+| `-bookworm` | `node:26-bookworm-slim` |
 
 The bases are the Debian variants of the official Node.js images, so the
 Debian release still determines the glibc the native backend links against.
