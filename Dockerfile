@@ -2,7 +2,7 @@
 # js backend shells out to; without it `moon run` and `moon test` fail on
 # that target. The Debian release still determines the glibc the native
 # backend links against.
-ARG BASE_IMAGE=node:24-trixie-slim
+ARG BASE_IMAGE=node:26-trixie-slim
 FROM ${BASE_IMAGE}
 
 # Exact upstream version such as "0.10.14+7d59c7ec9", "latest", or "nightly".
