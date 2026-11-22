@@ -59,6 +59,37 @@
         "github-runners"
       ],
       "groupName": "GitHub runners"
+    },
+    {
+      "description": "Merge non-major GitHub Actions updates once CI passes. CI does not run the publish steps, so a broken login or artifact action shows up in the next scheduled build, which retries the next day.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDepTypes": [
+        "action"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pinDigest"
+      ],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": false
+    },
+    {
+      "description": "The workflows run the scripts with the runner's python3, so .python-version follows the runner image rather than the newest CPython.",
+      "matchManagers": [
+        "pyenv"
+      ],
+      "enabled": false
     }
-  ]
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true,
+    "automergeType": "pr",
+    "platformAutomerge": false
+  }
 }
